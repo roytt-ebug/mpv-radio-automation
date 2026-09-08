@@ -7,8 +7,8 @@
 -- Behavior:
 --   * MPV handles playlist shuffle.
 --   * Recently played tracks are remembered persistently and skipped.
---   * Tracks shorter than 30 minutes always start at 0:00.
---   * Tracks 30 minutes or longer start at a random point from 0% to 75%.
+--   * Tracks shorter than 20 minutes always start at 0:00.
+--   * Tracks 20 minutes or longer start at a random point from 0% to 75%.
 --   * The last 10 random-start percentages are remembered across MPV restarts.
 --   * Exact recent percentages are not reused, and the new percentage
 --     tries to stay at least 6 percentage points away from the previous one.
@@ -27,8 +27,8 @@ math.random()
 local MAX_START_PERCENT = 75
 
 -- Only tracks this long or longer get a random start.
--- 30 minutes = 1800 seconds.
-local MIN_RANDOM_START_DURATION = 30 * 60
+-- 20 minutes = 1200 seconds.
+local MIN_RANDOM_START_DURATION = 20 * 60
 
 local PERCENT_HISTORY_SIZE = 10
 local MIN_PERCENT_GAP_FROM_LAST = 6
@@ -301,7 +301,7 @@ mp.register_event("file-loaded", function()
         if duration < MIN_RANDOM_START_DURATION then
             mp.msg.info(
                 string.format(
-                    "Full-track playback: %s (%d:%02d, under 30 min)",
+                    "Full-track playback: %s (%d:%02d, under 20 min)",
                     title,
                     math.floor(duration / 60),
                     math.floor(duration % 60)
