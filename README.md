@@ -11,8 +11,8 @@ A small Windows toolkit that turns MPV + yt-dlp into an automated YouTube backgr
 - Stops an older MPV instance before a scheduled session starts.
 - Avoids recently played tracks.
 - Remembers recent tracks across MPV restarts.
-- Tracks under 30 minutes play from 0:00.
-- Tracks 30 minutes or longer start at a random position from 0% to 75%.
+- Tracks under 20 minutes play from 0:00.
+- Tracks 20 minutes or longer start at a random position from 0% to 75%.
 - Remembers the last 10 random start percentages and avoids immediate/recent repeats.
 - Includes clipboard launchers for audio-only YouTube playback and always-on-top 720p video with best available audio.
 
@@ -75,8 +75,8 @@ Current behavior:
 
 - Persistent recent-track history; protects up to the last 5 tracks.
 - Persistent last-10 random-start percentages.
-- Tracks shorter than 30 minutes start at 0:00.
-- Tracks 30 minutes or longer start randomly from 0% to 75%.
+- Tracks shorter than 20 minutes start at 0:00.
+- Tracks 20 minutes or longer start randomly from 0% to 75%.
 - Exact recent percentages are not reused.
 - The new random percentage tries to stay at least 6 percentage points away from the previous value.
 
