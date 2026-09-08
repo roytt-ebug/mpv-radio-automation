@@ -1,0 +1,16 @@
+# Third-party binaries - download from upstream
+mpv.exe
+mpv.com
+yt-dlp.exe
+*.dll
+
+# Runtime histories
+portable_config/random-start-history.txt
+portable_config/recent-track-history.txt
+payload/portable_config/random-start-history.txt
+payload/portable_config/recent-track-history.txt
+
+# Local archives/downloads
+*.7z
+*.zip
+Downloads/
