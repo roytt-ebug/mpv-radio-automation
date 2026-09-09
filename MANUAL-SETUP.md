@@ -4,7 +4,7 @@
 
 This is an **alternative to running the installer**, not an extra installation step. It creates scheduled background music with dedicated audio routing, ten-track history, smarter starting points for long recordings and section sampling through one player.
 
-Already configured? Back up `C:\MPV` and export your existing tasks first. Stop MPV before replacing code. Edit existing tasks rather than creating duplicates. Keep only one active radio script; save backups outside `portable_config\scripts`.
+For an earlier test installation, use the short [fresh-setup instructions](README.md#start-over-with-a-fresh-setup) if you want to start over. They reset settings and listening history. Use only one set of music tasks and keep script backups outside `portable_config\scripts`.
 
 ## 1. Install MPV and the YouTube helper separately
 
@@ -16,11 +16,7 @@ Get `yt-dlp.exe` from the [official yt-dlp releases](https://github.com/yt-dlp/y
 
 Download `SHA2-256SUMS` from that **same release**. In PowerShell run `Get-FileHash -LiteralPath 'C:\MPV\yt-dlp.exe' -Algorithm SHA256` and compare the displayed hash with the entry named exactly `yt-dlp.exe`. They must match (hexadecimal letter case does not matter). Do not run a download whose checksum is missing or mismatched. The guided installer performs this comparison automatically only when downloading a missing yt-dlp; manual setup does not run that installer check. A checksum match is an integrity check against the published list, not a malware scan or signature verification.
 
-**Deno is recommended, not required by our installer.** It runs JavaScript that helps yt-dlp obtain YouTube stream information. Some streams work without it; adding it may help with JavaScript/signature extraction errors or missing formats. Guided setup continues when Deno is absent, old, incompatible, or blocked, and does not download it. Checksum verification for newly downloaded yt-dlp remains mandatory. See the [optional Deno explanation and compatibility guide](README.md#optional-recommendation-deno).
-
-If you choose to add Deno, check **Settings -> System -> About -> System type**. For **64-bit Windows with an x64-based Intel/AMD processor**, choose exactly **`deno-x86_64-pc-windows-msvc.zip`** from the [official Deno releases](https://github.com/denoland/deno/releases/latest). ARM64 uses `deno-aarch64-pc-windows-msvc.zip`, but this radio toolkit is tested for Windows x64 only. There is no current official 32-bit Windows Deno build. Deno's documented desktop minimum is Windows 10 version 1709 or newer, including Windows 11; choose a stable Deno version at least 2.3.0 for yt-dlp.
-
-Select the full `deno-...zip`: `.bsdiff` files are patches, `.sha256sum` files are checksum text, and `denort`, `libdenort` and source archives are not the needed CLI download. Extract `deno.exe` directly into `C:\MPV` and check it with `C:\MPV\deno.exe --version`. Restart MPV; no task or history reset is needed. Keep security protection enabled. Full details and upstream references are in the README guide linked above.
+**Deno is optional.** It can help yt-dlp handle YouTube's JavaScript checks. Follow the [Deno download table and instructions](README.md#optional-recommendation-deno) to choose the correct Windows ZIP. Extract `deno.exe` directly into `C:\MPV`, beside `mpv.exe` and `yt-dlp.exe`; do not run it from inside the archive. Restart MPV after adding it.
 
 Folder layout (`deno.exe` is optional):
 
@@ -76,6 +72,9 @@ Replace the placeholder with your full detected ID. Use **File -> Save As**, cho
 Save the **complete code below** in Notepad as `C:\MPV\portable_config\scripts\random-start.lua`, with **All files** selected. Do not include the Markdown backticks. Alternatively, copy [the source file](payload/portable_config/scripts/random-start.lua) to that location.
 
 Short tracks under 15 minutes are not randomly seeked. Longer seekable recordings favor less-recently-played portions within 0%-75%. Ten accepted starts and ten selected percentages persist. Section history records playback after installation; old percentage logs cannot reconstruct previously heard intervals. Sampling restricts candidate starts so the selected allowance fits.
+
+<details>
+<summary>Show the complete Lua script to copy</summary>
 
 <!-- BEGIN RADIO LUA -->
 ```lua
@@ -728,9 +727,11 @@ end)
 ```
 <!-- END RADIO LUA -->
 
+</details>
+
 ## 5. Copy the launcher and sampling settings
 
-Copy `Radio.ps1`, `Radio-Hidden.cs`, `Build-HiddenStarter.ps1`, `Check-Radio.ps1`, `Check Radio.cmd`, and `Stop Radio.cmd` from `payload` into `C:\MPV`. This launcher opens **one MPV**; it contains no crossfade engine. Windows PowerShell 5.1 and its existing .NET Framework are sufficient.
+Copy `Radio.ps1`, `Radio-Hidden.cs`, `Build-HiddenStarter.ps1`, `Check-Radio.ps1`, `Check Radio.cmd`, and `Stop Radio.cmd` from `payload` into `C:\MPV`. This launcher opens **one MPV** with visible playback controls. Windows PowerShell 5.1 and its existing .NET Framework are sufficient.
 
 Build the hidden starter once, from PowerShell or Command Prompt:
 
@@ -738,7 +739,7 @@ Build the hidden starter once, from PowerShell or Command Prompt:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Build-HiddenStarter.ps1"
 ```
 
-This creates `C:\MPV\Radio-Hidden.exe` without downloads. It starts the unchanged PowerShell supervisor without creating a console, waits for it, and returns its exit code. MPV's playback window stays available. The build refuses to overwrite an existing helper; stop playback and move that executable into your backup before rebuilding. If compilation or execution is blocked by security policy, stop and report it; do not disable protection. The guided installer performs this build and backup automatically after confirmation.
+This creates `C:\MPV\Radio-Hidden.exe` without downloads. It starts the PowerShell supervisor without creating a console, waits for it, and returns its exit code. MPV's playback window stays available. The build refuses to overwrite an existing helper; stop playback and move that executable into your backup before rebuilding. If compilation or execution is blocked by security policy, stop and report it; do not disable protection. The guided installer performs this build and backup automatically after confirmation.
 
 Create `C:\MPV\portable_config\script-opts\random-start.conf` with:
 
@@ -750,7 +751,7 @@ section_max_minutes=30
 fade_seconds=5
 ```
 
-Use Notepad's **All files** save type. `section_mode=no` turns off sampling. `fade_seconds=0` turns off the simple fade-out before the next sample; there is no overlap between tracks. Restart MPV after editing. The sample allowance is capped to the source length and the start leaves room for it.
+See the [defaults and allowed limits](README.md#defaults-and-adjustable-limits) before choosing different values. Use Notepad's **All files** save type. `section_mode=no` turns off sampling. `fade_seconds=0` turns off the simple fade-out before the next sample; there is no overlap between tracks. Restart MPV after editing. The sample allowance is capped to the source length and the start leaves room for it.
 
 ## 6. Test playback and the loaded script
 
@@ -768,7 +769,7 @@ Histories remain in `portable_config`: ten accepted starts in `recent-track-hist
 
 ## 7. Create the Morning task manually
 
-Open **Task Scheduler -> Create Task**. If updating, edit the existing task instead of creating a duplicate.
+Open **Task Scheduler → Create Task**. Use one task for each schedule; avoid duplicates.
 
 On **General**, name it **Music - Morning**, select the intended Windows user, choose **Run only when user is logged on**, and leave **Run with highest privileges** unchecked.
 
@@ -794,7 +795,7 @@ C:\MPV\Radio-Hidden.exe
 C:\MPV
 ```
 
-Build the helper in step 5 before saving this action. Remove any older `taskkill` and direct `mpv.exe` actions from this task; the single launcher replaces them.
+Build the helper in step 5 before saving this action. This task needs only the one action shown above.
 
 **Maximum runtime is a DURATION, not the time of day to stop.** `10800` seconds = three hours, `5400` = 90 minutes, `2700` = 45 minutes. The runtime includes loading and pauses. The launcher and Lua both enforce it across track changes. The installer accepts numbers in hours only, up to 24: `1`, `1.5`, `11.5`, or `24`. Manual task arguments still use seconds: multiply the hours by 3600; the maximum is `86400` seconds.
 
@@ -818,10 +819,24 @@ Right-click a task and choose **Run**, check F8/Check Radio, and listen. Then te
 
 YouTube loading can leave gaps. If the launcher is forcibly ended, the visible MPV may continue until Lua's session duration expires; use Q or Stop Radio to stop sooner. Normal stops save history. Hard shutdowns and write failures can lose unsaved checkpoints.
 
-## 10. Optional shortcuts and upgrades
+## 10. Optional shortcuts and troubleshooting
 
 For clipboard playback, copy `Play-YouTube.ps1` and both `Play YouTube ... .cmd` files from `payload` into `C:\MPV`. Create desktop shortcuts to the CMD files. Copy one YouTube URL and open the audio or video shortcut. It validates the link, stops this radio and opens manual playback with radio scripts disabled. Video is capped at 720p with best available audio and an always-on-top window. Copy `Update yt-dlp.cmd` if wanted.
 
-For an existing installation, follow [the README upgrade steps](README.md#update-an-existing-working-computer). Tasks already using `Radio.ps1` need only the hidden helper and action change; do not replace playback or history files for this fix. Older crossfade installations need the full payload upgrade. Keep `mpv.conf` and histories. No reinstall of MPV is required. Hidden startup failures return a nonzero **Last Run Result** and, when the folder is writable, save the latest error to `C:\MPV\Radio-Hidden-error.log`; check its timestamp because a later successful run does not erase it.
+For a fresh installation after an earlier test, follow the short [start-over instructions](README.md#start-over-with-a-fresh-setup). Hidden startup failures return a nonzero **Last Run Result** and, when the folder is writable, save the latest error to `C:\MPV\Radio-Hidden-error.log`. Check its date because a later successful run does not erase it.
 
 MPV provides the player controls, Lua runtime, seeking, shuffle, audio routing and [JSON IPC](https://mpv.io/manual/stable/#json-ipc). This project adds Windows schedules, history and section selection. See [THIRD_PARTY.md](THIRD_PARTY.md) for separately installed dependencies.
+
+
+<details>
+<summary>Technical notes: selection, history, and task behavior</summary>
+
+MPV shuffles playlist entries; duplicate entries are not removed. The shuffled queue starts fresh after a restart, while listening history persists. Repeat protection considers at most five recent starts and reduces that number for small playlists so they still have choices.
+
+Smart starts stay within 0%–75% of a recording and favor less recently heard overlap. Sampling narrows this range to leave room for the chosen allowance; percentage exclusions relax when necessary. With sampling off, selection scores up to 20 minutes ahead. Unknown-duration and nonseekable sources play normally.
+
+Default section history retains at most 40 intervals per recording, 2,000 overall, and 180 days; the influence of recent listening halves every 14 days. Pauses, buffering, muted playback, and detected seeks are excluded. Saves occur about every 15 seconds and on normal file transitions or shutdown. Avoid running a separate copy of the radio script against the same histories at the same time.
+
+The helper starts `Radio.ps1` without a console, waits, and returns its exit code. The supervisor coordinates starts for this installation, explicitly loads the Lua script once, and asks MPV to quit normally so history can be saved. Forced cleanup is limited to its own player. The supervisor and Lua both enforce session duration; Task Scheduler provides an extra minute for cleanup. Other user scripts are not automatically loaded during scheduled playback.
+
+</details>
