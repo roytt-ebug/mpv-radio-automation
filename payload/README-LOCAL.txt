@@ -1,8 +1,16 @@
 MPV RADIO AUTOMATION - ONE PLAYER
 
 Copy all payload files into C:\MPV. MPV itself is installed separately.
-Scheduled sessions use Radio.ps1, which starts one visible MPV window.
+Scheduled sessions use Radio-Hidden.exe to start the unchanged Radio.ps1
+supervisor without a PowerShell console. MPV's control window stays visible.
 The crossfade engine and second player have been removed.
+
+The installer builds Radio-Hidden.exe automatically using Windows .NET.
+For manual setup, copy Radio-Hidden.cs and Build-HiddenStarter.ps1 here,
+then run this once in PowerShell or Command Prompt (no downloads):
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Build-HiddenStarter.ps1"
+The build refuses to overwrite an existing helper. Stop playback and back
+up that executable before rebuilding. Do not bypass security restrictions.
 
 DEFAULTS
 Sampling ON; recordings at least 15 minutes qualify; sample allowance
@@ -19,12 +27,12 @@ Stop Radio.cmd stops only this installation's radio.
 Clipboard shortcuts use Play-YouTube.ps1 and bypass radio histories.
 
 TASK ACTION (one action per task)
-Program: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Program: C:\MPV\Radio-Hidden.exe
 Start in: C:\MPV
 Morning arguments:
--NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
+-Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 Day Finisher arguments:
--NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
+-Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 
 Maximum runtime is a DURATION, not the time of day to stop.
 Installer input is HOURS only: 1 = 1 hour, 1.5 = 90 minutes, 11.5 = 11.5 hours.
@@ -35,14 +43,18 @@ minute longer for cleanup. Keep Windows logged in and the speaker on.
 
 UPDATING
 Stop music and close its windows. Back up portable_config and export tasks.
-Copy ALL new payload files, keeping mpv.conf and history files. The supplied
-random-start.conf replaces sampling settings; save your customized copy.
-If a task already uses Radio.ps1, add -NonInteractive -WindowStyle Hidden
-before -File in its arguments; keep its program, URL, duration and triggers.
-The updated player disables terminal output; MPV's control window stays visible.
-If it uses taskkill + direct MPV, replace those with the single action above.
+Already using Radio.ps1? Copy ONLY Radio-Hidden.cs and Build-HiddenStarter.ps1,
+build the helper as above, and change the task program to Radio-Hidden.exe.
+Remove the PowerShell options through -File "C:\MPV\Radio.ps1"; retain the
+-Playlist and -DurationSeconds values, working folder, triggers and settings.
+No changes to Radio.ps1, Lua, sampling settings or any history are needed.
+For older crossfade/taskkill setups, follow the full README upgrade instead.
 The unused radio-session.json from the crossfade version can be deleted.
 Run the task, check F8/Check Radio, and confirm one player and your speaker.
+Hidden failures return a nonzero Task Scheduler Last Run Result and write
+the latest error to Radio-Hidden-error.log when the folder is writable.
+This bounded log is not erased on success; check its timestamp. Diagnostic
+and manual CMD windows are intentionally unchanged by this helper update.
 
 HISTORY
 portable_config\recent-track-history.txt retains ten accepted starts.

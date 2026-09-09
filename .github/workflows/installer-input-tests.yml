@@ -39,6 +39,9 @@ jobs:
       - name: Test launcher syntax and safe URL handling
         shell: powershell
         run: .\tests\Test-RadioLauncher.ps1
+      - name: Build and test the hidden starter and a real no-console PowerShell child
+        shell: powershell
+        run: .\tests\Test-HiddenStarter.ps1
       - name: Download a Windows MPV test runtime (not redistributed)
         shell: powershell
         run: |
