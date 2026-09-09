@@ -4,11 +4,17 @@ on:
     paths:
       - 'Install.ps1'
       - 'tests/Test-InstallerInput.ps1'
+      - 'MANUAL-SETUP.md'
+      - 'README.md'
+      - 'payload/portable_config/scripts/random-start.lua'
       - '.github/workflows/installer-input-tests.yml'
   pull_request:
     paths:
       - 'Install.ps1'
       - 'tests/Test-InstallerInput.ps1'
+      - 'MANUAL-SETUP.md'
+      - 'README.md'
+      - 'payload/portable_config/scripts/random-start.lua'
       - '.github/workflows/installer-input-tests.yml'
   workflow_dispatch:
 permissions:
@@ -21,6 +27,6 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Test parsing and task definitions in Windows PowerShell 5.1
+      - name: Test inputs, task definitions and manual Lua copy in Windows PowerShell 5.1
         shell: powershell
         run: .\tests\Test-InstallerInput.ps1

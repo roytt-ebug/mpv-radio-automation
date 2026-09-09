@@ -20,18 +20,27 @@ songs. Repeat protection uses a smaller, adaptive window. Tracks under
 20 minutes are not randomly seeked; longer tracks get a 0%-75% random start.
 Manual launchers disable the radio script and do not add to this history.
 
-OPTIONAL PLAYLIST RECOMMENDATIONS
----------------------------------
+SAMPLE PLAYLISTS IN GUIDED SETUP (REVISION 3)
+--------------------------------------------
 Morning Music:
 https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
 
 Day Finisher:
 https://www.youtube.com/playlist?list=PLBejJIaDgbyQ
 
-These are optional external playlists, not automatic installer defaults.
-Users may enter their own URLs. Playlist contents and availability can change.
-At a fresh installer's playlist prompt, paste only the URL and press Enter.
-A blank playlist prompt skips that task and leaves any existing task unchanged.
+At each installer's playlist prompt, type S and press Enter to use the sample
+shown for that task. Or paste your own complete URL. A blank answer skips that
+task and leaves any existing task unchanged. S is an installer choice only;
+do not put S into a Task Scheduler action.
+
+These are optional external playlists. Contents and availability can change.
+
+MAXIMUM RUNTIME
+----------------
+Maximum runtime is a DURATION, not the time of day to stop.
+3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.
+For example, start 18:35 with a runtime of 1.5 means an approximate stop at
+20:05. Retries, delayed starts or interruptions may change the actual stop.
 
 CHANGE THE PLAYLIST IN AN EXISTING TASK
 --------------------------------------
@@ -74,3 +83,9 @@ https://github.com/roytt-ebug/mpv-radio-automation
 
 Playlist recommendations and instructions:
 https://github.com/roytt-ebug/mpv-radio-automation/blob/main/EXAMPLE-PLAYLISTS.md
+
+MANUAL SETUP WITHOUT THE INSTALLER
+----------------------------------
+A complete step-by-step guide, including the full Lua code and all Task
+Scheduler fields, is in MANUAL-SETUP.md in the downloaded repository, or at:
+https://github.com/roytt-ebug/mpv-radio-automation/blob/main/MANUAL-SETUP.md

@@ -1,4 +1,4 @@
-# MPV Radio Automation setup helper, input-validation revision 2.
+# MPV Radio Automation setup helper, guided setup revision 3.
 # Requires Windows PowerShell 5.1. MPV must already be installed in C:\MPV.
 # -FunctionsOnly is for offline parser tests; it does not run installation.
 param(
@@ -71,7 +71,7 @@ function ConvertTo-MusicRuntime([string]$Text) {
     } elseif ($s -match '^(?<v>[0-9]+(?:\.[0-9]+)?)\s*(h|hr|hrs|hour|hours)?$') {
         $minutes = 60 * [double]::Parse($Matches.v, [cultureinfo]::InvariantCulture)
     } else {
-        throw 'Enter a duration, not a stop time: 3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.'
+        throw 'Enter a duration, not the time of day to stop: 3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.'
     }
     if ($minutes -lt 1 -or $minutes -gt 1440) { throw 'Use a runtime between 1 minute and 24 hours.' }
     return [timespan]::FromSeconds([math]::Round($minutes * 60))
@@ -95,6 +95,25 @@ function ConvertTo-YouTubePlaylist([string]$Text) {
     }
     # Remove share-tracking, watch/index and time parameters from scheduled playlists.
     return 'https://www.youtube.com/playlist?list=' + $Matches[1]
+}
+
+function Get-SamplePlaylist([string]$TaskName) {
+    # Contributor-approved examples. Never selected just by pressing Enter.
+    switch ($TaskName) {
+        'Music - Morning' { return 'https://www.youtube.com/playlist?list=PLZAsCc2NQgn0' }
+        'Music - Day Finisher' { return 'https://www.youtube.com/playlist?list=PLBejJIaDgbyQ' }
+        default { return '' }
+    }
+}
+
+function Resolve-PlaylistInput([string]$Text, [string]$SamplePlaylist) {
+    $s = $Text.Trim()
+    if ($s -in @('S','SAMPLE')) {
+        if (-not $SamplePlaylist) { throw 'No sample is available for this task. Paste a playlist URL, or press Enter to skip.' }
+        return ConvertTo-YouTubePlaylist $SamplePlaylist
+    }
+    # Blank still means skip. Custom links go through the same URL validation.
+    return ConvertTo-YouTubePlaylist $s
 }
 
 function ConvertFrom-MpvDevices([string[]]$Lines) {
@@ -139,11 +158,19 @@ function Read-Validated([string]$Prompt, [string]$Default, [scriptblock]$Parser)
 
 function Read-MusicSession([string]$Name, [string]$DefaultTime, [string]$DefaultDays) {
     Write-Host "`n--- $Name ---" -ForegroundColor Cyan
-    Write-Host 'Paste the full playlist link from your browser. No command or quotation marks are needed.'
-    Write-Host 'Format example only: https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID'
-    Write-Host 'Press Enter at the URL prompt to SKIP this task. An existing task will be left unchanged.'
-    $playlist = Read-Validated 'YouTube playlist URL (Enter = skip this task)' '' { param($v) ConvertTo-YouTubePlaylist $v }
+    $sample = Get-SamplePlaylist $Name
+    if ($sample) {
+        Write-Host ('Sample playlist: ' + $sample) -ForegroundColor Green
+        Write-Host 'Type S to use this sample, or paste your own full YouTube playlist link.'
+        Write-Host 'S selects the sample shown ABOVE for this task; no copying is needed.'
+    } else {
+        Write-Host 'Paste the full playlist link from your browser.'
+    }
+    Write-Host 'No command or quotation marks are needed. Press Enter to SKIP this task.'
+    Write-Host 'Skipping leaves any existing task unchanged. Type Q to cancel setup.'
+    $playlist = Read-Validated 'YouTube playlist (S = sample, URL = your own, Enter = skip)' '' { param($v) Resolve-PlaylistInput $v $sample }
     if (-not $playlist) { Write-Host 'Skipped. No time/day/runtime questions for this task.'; return $null }
+    Write-Host ('  Selected playlist: ' + $playlist) -ForegroundColor Green
     Write-Host 'Start time is a LOCAL CLOCK TIME. 18:35, 1835, and 6:35 PM all mean 6:35 in the evening.'
     Write-Host 'For morning use 06:45, 0645, or 6:45 AM. A task named Morning may use any time for testing.'
     $at = Read-Validated 'Start time' $DefaultTime { param($v) ConvertTo-ClockTime $v }
@@ -151,7 +178,7 @@ function Read-MusicSession([string]$Name, [string]$DefaultTime, [string]$Default
     Write-Host 'Days: 1 = Monday-Friday; 2 = Monday-Saturday; 3 = every day; 4 = Saturday-Sunday.'
     Write-Host 'Or type a custom list: MON,WED,FRI. Capitalization does not matter.'
     $days = @(Read-Validated 'Days (preset number or list)' $DefaultDays { param($v) ConvertTo-MusicDays $v })
-    Write-Host 'Maximum runtime is a DURATION, not the time to stop.'
+    Write-Host 'Maximum runtime is a DURATION, not the time of day to stop.'
     Write-Host 'Examples: 3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.'
     $runtime = Read-Validated 'Maximum runtime' '3' { param($v) ConvertTo-MusicRuntime $v }
     return [pscustomobject]@{ Name=$Name; Playlist=$playlist; At=$at; Days=$days; Runtime=$runtime }
@@ -189,7 +216,7 @@ try {
     }
     $sid = New-Object Security.Principal.SecurityIdentifier($TaskUserSid)
     $taskUser = $sid.Translate([Security.Principal.NTAccount]).Value
-    Write-Host "`nMPV Radio Automation - guided setup (revision 2)" -ForegroundColor Cyan
+    Write-Host "`nMPV Radio Automation - guided setup (revision 3)" -ForegroundColor Cyan
     Write-Host 'Type only your answer, then press Enter. Do not type the prompt or [brackets].'
     Write-Host 'Press Enter to accept a displayed default. Type Q at any input prompt to cancel.'
     Write-Host ("Computer time now: " + (Get-Date).ToString('yyyy-MM-dd HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture))
