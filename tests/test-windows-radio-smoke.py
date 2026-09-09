@@ -6,9 +6,13 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import wave
+
+# MPV logs may contain symbols outside the Windows console code page.
+sys.stdout.reconfigure(errors='backslashreplace')
 
 if os.name != 'nt':
     raise SystemExit('This test exercises Windows named pipes and requires Windows.')
