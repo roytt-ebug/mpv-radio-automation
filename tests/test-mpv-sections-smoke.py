@@ -43,7 +43,6 @@ mp.add_timeout(22, function() mp.msg.error("SMOKE FAILED: timed out"); mp.comman
     print(result.stdout)
     assert result.returncode == 0, 'MPV smoke test did not exit successfully'
     assert 'SMOKE PASS' in result.stdout, 'MPV did not progress through three loads'
-    # Windows paths are literal filenames on Linux; production paths remain unchanged.
     section_file = work / 'heard-sections.txt'
     records = [line for line in section_file.read_text().splitlines() if not line.startswith('#')]
     assert len(records) >= 2, 'Estimated playback from both completed samples was not saved'

@@ -3,9 +3,7 @@ section_mode=yes
 min_duration_minutes=15
 section_min_minutes=10
 section_max_minutes=30
-# Overlap when launched by Radio.ps1; 0 disables overlap.
-crossfade_seconds=5
-# Sequential fade-out when random-start.lua runs without the controller.
+# Fade out the current sample, then load the next track; 0 disables the fade.
 fade_seconds=5
 preference_window_minutes=20
 recency_half_life_days=14

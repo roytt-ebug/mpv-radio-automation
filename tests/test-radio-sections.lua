@@ -190,23 +190,11 @@ s=boot({section_mode=false}); s:load(one,0,7200); s:play(2000); eq(s:count('play
 s=boot({section_min_minutes=10,section_max_minutes=10}); s:load(one,0,900)
 eq(s.props['time-pos']<=300,true,'a full ten-minute sample fits')
 s=boot({section_min_minutes=30,section_max_minutes=30}); s:load(one,0,900)
-eq(s.props['time-pos'],0,'sample capped to source starts at zero'); s:tick(0.5,nil); near(s.status.sample_limit,900,'sample capped to recording duration')
--- Preload is not listening; serialized checkpoints merge both sides of an overlap.
-local shared={}; local a=boot({managed=true,section_min_minutes=1,section_max_minutes=1},shared)
-local b=boot({managed=true,section_min_minutes=1,section_max_minutes=1},shared)
-a:load(one,0,7200); b:load(playlist(2),1,7200)
-eq(shared[TRACK],nil,'preloads not logged'); eq(shared[PERCENT],nil,'preloaded seek not saved')
-a:emit('radio-activate'); a:play(4); a:emit('radio-checkpoint')
-b:emit('radio-activate'); b:play(3); b:emit('radio-checkpoint')
-a:play(3); a:emit('radio-finish'); b:play(3); b:emit('radio-finish')
-r=ranges(shared[SECTIONS]); eq(#r,2,'both decks saved one interval without duplication')
-local total=0; for _,v in ipairs(r) do total=total+v.b-v.a end
-near(total,12,'both audible overlap intervals retained'); eq(#rows(shared[TRACK]),2,'one history shared across decks')
-eq(#rows(shared[PERCENT]),2,'only accepted starts saved percentages')
--- Managed samples never auto-advance: the controller owns overlap and track changes.
-s=boot({managed=true,section_min_minutes=0.1,section_max_minutes=0.1}); s:load(one,0,7200); s:emit('radio-activate'); s:play(8)
-eq(s:count('playlist-next'),0,'controller owns transitions'); eq(s.status.remaining,0,'controller sees sample expiry')
-local seq=s.status.sequence; s:emit('radio-ping'); eq(s.status.sequence,seq+1,'status check is acknowledged')
--- A dead controller cannot leave hidden MPV audio running indefinitely.
-s=boot({managed=true}); s:tick(16,nil); eq(s:count('quit'),1,'orphan deck exits after heartbeat timeout')
+eq(s.props['time-pos'],0,'sample capped to source starts at zero'); s:emit('radio-ping'); near(s.status.sample_limit,900,'sample capped to recording duration')
+-- The diagnostic must obtain a fresh Lua acknowledgement.
+local sequence=s.status.sequence; s:emit('radio-ping'); eq(s.status.sequence,sequence+1,'ping acknowledged')
+-- The total session limit includes pauses and survives file changes.
+s=boot({session_seconds=4}); s:load(one,0,120); s:set('pause',true); s:tick(2,nil)
+s:load(one,0,120); s:tick(2,nil); eq(s:count('quit'),1,'whole session limit across loads and pause')
+s:tick(1,nil); eq(s:count('quit'),1,'session quit requested only once')
 print('PASS: '..checks..' section-selection, tracking, persistence, sampling and regression checks (mocked MPV).')

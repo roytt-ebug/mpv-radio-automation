@@ -144,11 +144,11 @@ if ($env:OS -eq 'Windows_NT') {
         At=(ConvertTo-ClockTime '1835'); Days=@(ConvertTo-MusicDays '2'); Runtime=(ConvertTo-MusicRuntime '1.5')
     }
     $task = New-MusicTaskDefinition $session ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) 'C:\MPV'
-    Assert-Equal $task.Actions.Count 1 'one radio controller action'
-    Assert-Equal $task.Actions[0].Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" 'PowerShell controller executable'
+    Assert-Equal $task.Actions.Count 1 'one radio launcher action'
+    Assert-Equal $task.Actions[0].Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" 'PowerShell launcher executable'
     Assert-Equal $task.Actions[0].WorkingDirectory 'C:\MPV' 'working folder'
     Assert-Equal ([xml.xmlconvert]::ToTimeSpan($task.Settings.ExecutionTimeLimit)).TotalMinutes 91 '90 minutes plus one minute safety cleanup'
-    Assert-Equal $task.Actions[0].Arguments.Contains('-DurationSeconds 5400') $true 'controller enforces the requested 90 minutes'
+    Assert-Equal $task.Actions[0].Arguments.Contains('-DurationSeconds 5400') $true 'launcher enforces the requested 90 minutes'
     Assert-Equal $task.Settings.WakeToRun $true 'wake enabled'
     Assert-Equal $task.Settings.StartWhenAvailable $false 'missed-start catchup disabled'
     Assert-Equal $task.Settings.RestartCount 3 'restart count'
