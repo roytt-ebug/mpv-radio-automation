@@ -12,16 +12,35 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Build-HiddenStar
 The build refuses to overwrite an existing helper. Stop playback and back
 up that executable before rebuilding. Do not bypass security restrictions.
 
-YOUTUBE DEPENDENCY AND DOWNLOAD CHECKS (installer revision 7)
-Use stable Deno 2.3.0 or newer. The simplest setup is deno.exe directly in
-C:\MPV beside yt-dlp.exe. Download deno-x86_64-pc-windows-msvc.zip from:
+OPTIONAL DENO RECOMMENDATION (installer revision 8)
+Deno runs JavaScript used by yt-dlp to obtain YouTube stream information.
+Some playlists work without it. It may help with JavaScript/signature
+extraction errors or missing formats, but cannot solve every playback error.
+Setup CONTINUES if Deno is missing, old, incompatible, blocked or unresponsive.
+It is not downloaded automatically. The checksum check below stays mandatory.
+
+To choose a compatible download, open Settings > System > About > System type:
+64-bit Windows + x64-based Intel/AMD processor:
+  deno-x86_64-pc-windows-msvc.zip
+64-bit Windows + ARM-based processor (ARM64):
+  deno-aarch64-pc-windows-msvc.zip
+The ARM mapping is for Deno; this radio toolkit is tested for Windows x64 only.
+There is no current official Windows 32-bit Deno build; the toolkit is x64.
+Deno needs Windows 10 version 1709 or newer (including Windows 11).
+Choose stable Deno 2.3.0 or newer for yt-dlp from:
 https://github.com/denoland/deno/releases/latest
-Extract deno.exe, not denort.exe. Setup checks its version before replacing
-project files/tasks, but does not download Deno. If using a different UAC
-administrator, portable Deno is required; that administrator's PATH is not
-the listener's PATH. Custom Node/QuickJS settings are not checked or changed.
+Choose the full deno-...zip. .bsdiff = update patch; .sha256sum = checksum text.
+denort/libdenort and source archives are not the needed CLI download.
+apple-darwin = macOS; unknown-linux-gnu = Linux.
+Extract deno.exe directly into C:\MPV beside yt-dlp.exe, then check:
+C:\MPV\deno.exe --version
+Restart MPV after adding it; no task/history reset or reinstall is needed.
+If using a different UAC administrator, the check looks only in C:\MPV;
+that administrator's PATH is not the listener's PATH. Setup still continues.
+Custom Node/QuickJS settings are not checked or changed.
 See https://github.com/yt-dlp/yt-dlp/wiki/EJS for upstream requirements.
 
+VERIFIED YT-DLP DOWNLOAD
 When yt-dlp.exe is missing, setup downloads it and SHA2-256SUMS from the
 same official release and compares SHA-256 before accepting the executable.
 Missing, malformed, ambiguous or mismatched checksums stop installation.
