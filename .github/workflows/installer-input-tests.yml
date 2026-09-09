@@ -1,0 +1,26 @@
+name: Installer input tests
+on:
+  push:
+    paths:
+      - 'Install.ps1'
+      - 'tests/Test-InstallerInput.ps1'
+      - '.github/workflows/installer-input-tests.yml'
+  pull_request:
+    paths:
+      - 'Install.ps1'
+      - 'tests/Test-InstallerInput.ps1'
+      - '.github/workflows/installer-input-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-input-validation:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test parsing and task definitions in Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\Test-InstallerInput.ps1
