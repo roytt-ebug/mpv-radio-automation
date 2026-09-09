@@ -61,20 +61,15 @@ function ConvertTo-MusicDays([string]$Text) {
 }
 
 function ConvertTo-MusicRuntime([string]$Text) {
-    $s = $Text.Trim().ToLowerInvariant()
-    $minutes = 0.0
-    if ($s -match '^(?<h>[0-9]{1,2}):(?<m>[0-9]{2})$') {
-        if ([int]$Matches.m -gt 59) { throw 'For H:MM, minutes must be 00-59. Example: 1:30.' }
-        $minutes = ([int]$Matches.h * 60) + [int]$Matches.m
-    } elseif ($s -match '^(?<v>[0-9]+)\s*(m|min|mins|minute|minutes)$') {
-        $minutes = [double]::Parse($Matches.v, [cultureinfo]::InvariantCulture)
-    } elseif ($s -match '^(?<v>[0-9]+(?:\.[0-9]+)?)\s*(h|hr|hrs|hour|hours)?$') {
-        $minutes = 60 * [double]::Parse($Matches.v, [cultureinfo]::InvariantCulture)
-    } else {
-        throw 'Enter a duration, not the time of day to stop: 3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.'
+    $s = $Text.Trim()
+    if ($s -notmatch '^[0-9]+(?:\.[0-9]+)?$') {
+        throw 'Enter hours as a number: 1 = 1 hour; 1.5 = 1 hour 30 minutes; 11.5 = 11 hours 30 minutes. Do not type minutes, units, or H:MM.'
     }
-    if ($minutes -lt 1 -or $minutes -gt 1440) { throw 'Use a runtime between 1 minute and 24 hours.' }
-    return [timespan]::FromSeconds([math]::Round($minutes * 60))
+    $hours = [double]::Parse($s, [cultureinfo]::InvariantCulture)
+    if ($hours -lt (1.0 / 60) -or $hours -gt 24) {
+        throw 'Use a runtime from 1 minute to 24 hours, entered in hours. Example: 0.5 = 30 minutes; 24 = 24 hours.'
+    }
+    return [timespan]::FromSeconds([math]::Round($hours * 3600))
 }
 
 function ConvertTo-YouTubePlaylist([string]$Text) {
@@ -179,14 +174,15 @@ function Read-MusicSession([string]$Name, [string]$DefaultTime, [string]$Default
     Write-Host 'Or type a custom list: MON,WED,FRI. Capitalization does not matter.'
     $days = @(Read-Validated 'Days (preset number or list)' $DefaultDays { param($v) ConvertTo-MusicDays $v })
     Write-Host 'Maximum runtime is a DURATION, not the time of day to stop.'
-    Write-Host 'Examples: 3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.'
-    $runtime = Read-Validated 'Maximum runtime' '3' { param($v) ConvertTo-MusicRuntime $v }
+    Write-Host 'Enter HOURS only: 1 = 1 hour; 3 = 3 hours; 1.5 = 1 hour 30 minutes; 11.5 = 11 hours 30 minutes.'
+    Write-Host 'Maximum: 24 hours. Use decimals, not H:MM or minutes. Example: 0.75 = 45 minutes.'
+    $runtime = Read-Validated 'Maximum runtime (hours, up to 24)' '3' { param($v) ConvertTo-MusicRuntime $v }
     return [pscustomobject]@{ Name=$Name; Playlist=$playlist; At=$at; Days=$days; Runtime=$runtime }
 }
 
 function New-MusicTaskDefinition($Session, [string]$UserSid, [string]$MpvFolder) {
     $seconds = $Session.Runtime.TotalSeconds.ToString([cultureinfo]::InvariantCulture)
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $MpvFolder + '\Radio.ps1" -Playlist "' + $Session.Playlist + '" -DurationSeconds ' + $seconds
+    $arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $MpvFolder + '\Radio.ps1" -Playlist "' + $Session.Playlist + '" -DurationSeconds ' + $seconds
     $play = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $arguments -WorkingDirectory $MpvFolder
     $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek ([System.DayOfWeek[]]$Session.Days) -At $Session.At
     $settings = New-ScheduledTaskSettingsSet -WakeToRun -ExecutionTimeLimit ($Session.Runtime + (New-TimeSpan -Minutes 1)) -RestartInterval (New-TimeSpan -Minutes 5) -RestartCount 3 -MultipleInstances IgnoreNew
@@ -278,7 +274,7 @@ try {
         Write-Host ("`n$verb : " + $session.Name)
         Write-Host ('  Days: ' + ($session.Days -join ', '))
         Write-Host ('  Start: ' + $session.At.ToString('HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture))
-        Write-Host ('  Maximum runtime: ' + $session.Runtime.TotalMinutes + ' minutes')
+        Write-Host ('  Maximum runtime: ' + $session.Runtime.TotalHours.ToString([cultureinfo]::InvariantCulture) + ' hours')
         Write-Host ('  Approximate stop: ' + $end.ToString('HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture) + $dayNote)
         Write-Host ('  Playlist: ' + $session.Playlist)
     }

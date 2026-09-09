@@ -22,12 +22,14 @@ TASK ACTION (one action per task)
 Program: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
 Start in: C:\MPV
 Morning arguments:
--NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
+-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 Day Finisher arguments:
--NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
+-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 
 Maximum runtime is a DURATION, not the time of day to stop.
-10800 seconds = three hours; 5400 = 90 minutes; 2700 = 45 minutes.
+Installer input is HOURS only: 1 = 1 hour, 1.5 = 90 minutes, 11.5 = 11.5 hours.
+Use 0.75 for 45 minutes. Maximum: 24 hours. H:MM and unit words are rejected.
+Manual task arguments use seconds: 10800 = three hours; 86400 = 24 hours.
 Loading and pauses count. Set the Task Scheduler backup stop limit one
 minute longer for cleanup. Keep Windows logged in and the speaker on.
 
@@ -35,7 +37,9 @@ UPDATING
 Stop music and close its windows. Back up portable_config and export tasks.
 Copy ALL new payload files, keeping mpv.conf and history files. The supplied
 random-start.conf replaces sampling settings; save your customized copy.
-If a task already uses Radio.ps1, keep its action, URL and duration.
+If a task already uses Radio.ps1, add -NonInteractive -WindowStyle Hidden
+before -File in its arguments; keep its program, URL, duration and triggers.
+The updated player disables terminal output; MPV's control window stays visible.
 If it uses taskkill + direct MPV, replace those with the single action above.
 The unused radio-session.json from the crossfade version can be deleted.
 Run the task, check F8/Check Radio, and confirm one player and your speaker.

@@ -20,7 +20,7 @@ root = pathlib.Path(__file__).resolve().parents[1]
 mpv = shutil.which('mpv')
 powershell = shutil.which('powershell')
 assert mpv and powershell, 'MPV and Windows PowerShell are required'
-base = [powershell, '-NoProfile', '-ExecutionPolicy', 'Bypass']
+base = [powershell, '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass']
 with tempfile.TemporaryDirectory(prefix='radio single player ') as directory:
     work = pathlib.Path(directory)
     for name in ('Radio.ps1', 'Check-Radio.ps1'):
@@ -75,6 +75,10 @@ with tempfile.TemporaryDirectory(prefix='radio single player ') as directory:
         check(first)
         initial = radio_processes()
         assert len(initial) == 1, f'Expected one radio MPV, found {initial}'
+        # The scheduled player must not open or keep a separate terminal alive.
+        env = dict(os.environ, RADIO_TEST_FOLDER=str(work))
+        probe = ". (Join-Path $env:RADIO_TEST_FOLDER 'Radio.ps1') -FunctionsOnly; $endpoint = 'mpv-radio-' + (Get-RadioKey $env:RADIO_TEST_FOLDER); if ((Invoke-RadioCommand $endpoint @('get_property','options/terminal')) -ne $false) { throw 'MPV terminal must be disabled' }"
+        subprocess.run(base + ['-Command', probe], env=env, check=True, timeout=10)
         second = launch(60)
         assert first.wait(timeout=20) == 0, 'Previous radio launcher failed to close cleanly'
         check(second)

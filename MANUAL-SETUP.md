@@ -718,7 +718,7 @@ end)
 
 ## 5. Copy the launcher and sampling settings
 
-Copy `Radio.ps1`, `Check-Radio.ps1`, `Check Radio.cmd`, and `Stop Radio.cmd` from `payload` into `C:\MPV`. This launcher opens **one MPV**; it contains no crossfade engine. Windows PowerShell 5.1 is sufficient.
+Copy `Radio.ps1`, `Check-Radio.ps1`, `Check Radio.cmd`, and `Stop Radio.cmd` from `payload` into `C:\MPV`. This launcher opens **one MPV**; it contains no crossfade engine. Windows PowerShell 5.1 is sufficient. The task's `-WindowStyle Hidden` flag requests a hidden PowerShell window, and MPV terminal output is disabled. MPV's playback window stays available.
 
 Create `C:\MPV\portable_config\script-opts\random-start.conf` with:
 
@@ -737,7 +737,7 @@ Use Notepad's **All files** save type. `section_mode=no` turns off sampling. `fa
 In Command Prompt run:
 
 ```bat
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 180
+powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 180
 ```
 
 There should be one MPV window. Press **F8** in it for the Lua version and settings. Open **Check Radio.cmd** for a live MPV/Lua acknowledgement: one PASS with sampling enabled, cutoff `15`, and range `10` to `30`. Listen for the selected speaker. A three-minute session checks startup and stopping; it is shorter than the normal sample allowance.
@@ -765,7 +765,7 @@ C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
 **Add arguments:**
 
 ```text
--NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
+-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 ```
 
 **Start in:**
@@ -776,7 +776,7 @@ C:\MPV
 
 Use your Windows folder if it is not `C:\Windows`. Remove any older `taskkill` and direct `mpv.exe` actions from this task; the single launcher replaces them.
 
-**Maximum runtime is a DURATION, not the time of day to stop.** `10800` seconds = three hours, `5400` = 90 minutes, `2700` = 45 minutes. The runtime includes loading and pauses. The launcher and Lua both enforce it across track changes.
+**Maximum runtime is a DURATION, not the time of day to stop.** `10800` seconds = three hours, `5400` = 90 minutes, `2700` = 45 minutes. The runtime includes loading and pauses. The launcher and Lua both enforce it across track changes. The installer accepts numbers in hours only, up to 24: `1`, `1.5`, `11.5`, or `24`. Manual task arguments still use seconds: multiply the hours by 3600; the maximum is `86400` seconds.
 
 On **Conditions**, enable **Wake the computer to run this task**. Leave the usual AC-power conditions enabled unless you deliberately want battery playback.
 
@@ -787,7 +787,7 @@ On **Settings**, allow on-demand execution, leave missed-start catch-up off, ret
 Repeat with name **Music - Day Finisher**, weekly at **15:45**, Monday-Friday, and these arguments:
 
 ```text
--NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
+-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 ```
 
 Keep the same executable and working directory. A new radio session stops the previous radio for this installation before starting its one player. Unrelated MPV windows are left alone. Both schedules share history.
