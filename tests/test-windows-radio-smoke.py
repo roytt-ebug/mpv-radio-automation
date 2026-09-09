@@ -25,6 +25,9 @@ with tempfile.TemporaryDirectory(prefix='radio single player ') as directory:
     work = pathlib.Path(directory)
     for name in ('Radio.ps1', 'Check-Radio.ps1'):
         shutil.copy2(root / 'payload' / name, work / name)
+    starter = work / 'Radio-Hidden.exe'
+    subprocess.run(base + ['-File', str(root / 'payload/Build-HiddenStarter.ps1'),
+        '-OutputPath', str(starter)], check=True, timeout=30)
     config = work / 'portable_config'
     (config / 'scripts').mkdir(parents=True)
     (config / 'script-opts').mkdir()
@@ -47,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix='radio single player ') as directory:
     def launch(seconds):
         handle = (work / f'launch-{len(launches)}.log').open('w', encoding='utf-8')
         handles.append(handle)
-        process = subprocess.Popen(base + ['-File', str(work / 'Radio.ps1'), '-MpvExecutable', mpv,
+        process = subprocess.Popen([str(starter), '-MpvExecutable', mpv,
             '-Playlist', str(media), '-DurationSeconds', str(seconds)], stdout=handle, stderr=subprocess.STDOUT)
         launches.append(process)
         return process
@@ -99,7 +102,7 @@ with tempfile.TemporaryDirectory(prefix='radio single player ') as directory:
         assert len(tracks) >= 4, 'Sampling did not move through the looping playlist'
         heard = [x for x in (config / 'heard-sections.txt').read_text().splitlines() if not x.startswith('#')]
         assert len(heard) >= 2, 'Section checkpoints were not retained'
-        print('PASS: one MPV, Lua acknowledgement, session replacement, stop, runtime, sampling and saved history; unrelated MPV survived.')
+        print('PASS: hidden starter with unchanged PowerShell supervisor; one MPV, Lua acknowledgement, session replacement, stop, runtime, sampling and saved history; unrelated MPV survived.')
     finally:
         for process in launches:
             if process.poll() is None:
@@ -115,3 +118,6 @@ with tempfile.TemporaryDirectory(prefix='radio single player ') as directory:
             handle.close()
         for log in work.glob('launch-*.log'):
             print(log.name + '\n' + log.read_text(encoding='utf-8', errors='replace'))
+        error_log = work / 'Radio-Hidden-error.log'
+        if error_log.exists():
+            print(error_log.name + '\n' + error_log.read_text(encoding='utf-8', errors='replace'))

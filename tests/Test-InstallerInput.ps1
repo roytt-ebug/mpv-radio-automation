@@ -145,15 +145,16 @@ if ($env:OS -eq 'Windows_NT') {
     }
     $task = New-MusicTaskDefinition $session ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) 'C:\MPV'
     Assert-Equal $task.Actions.Count 1 'one radio launcher action'
-    Assert-Equal $task.Actions[0].Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" 'PowerShell launcher executable'
+    Assert-Equal $task.Actions[0].Execute 'C:\MPV\Radio-Hidden.exe' 'hidden starter executable'
     Assert-Equal $task.Actions[0].WorkingDirectory 'C:\MPV' 'working folder'
-    Assert-Equal $task.Actions[0].Arguments.Contains('-WindowStyle Hidden') $true 'scheduled PowerShell window hidden'
-    Assert-Equal $task.Actions[0].Arguments.Contains('-NonInteractive') $true 'scheduled launcher cannot wait for terminal input'
+    Assert-Equal $task.Actions[0].Arguments '-Playlist "https://www.youtube.com/playlist?list=PL_TEST-ID" -DurationSeconds 5400' 'helper receives only unchanged radio parameters'
     Assert-Equal ([xml.xmlconvert]::ToTimeSpan($task.Settings.ExecutionTimeLimit)).TotalMinutes 91 '90 minutes plus one minute safety cleanup'
     Assert-Equal $task.Actions[0].Arguments.Contains('-DurationSeconds 5400') $true 'launcher enforces the requested 90 minutes'
     Assert-Equal $task.Settings.WakeToRun $true 'wake enabled'
     Assert-Equal $task.Settings.StartWhenAvailable $false 'missed-start catchup disabled'
     Assert-Equal $task.Settings.RestartCount 3 'restart count'
+    Assert-Equal $task.Settings.MultipleInstances 2 'duplicate task starts still ignored'
+    Assert-Equal $task.Principal.LogonType 3 'interactive user session retained for MPV controls'
     Assert-Equal ([datetime]$task.Triggers[0].StartBoundary).ToString('HH:mm') '18:35' 'actual trigger time'
 }
 Write-Host "PASS: $script:checks checks. No tasks were registered and no music was played."

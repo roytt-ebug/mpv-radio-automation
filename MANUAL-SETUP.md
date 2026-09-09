@@ -22,6 +22,9 @@ C:\MPV\
     mpv.com
     yt-dlp.exe
     Radio.ps1
+    Radio-Hidden.cs
+    Build-HiddenStarter.ps1
+    Radio-Hidden.exe   (built locally in step 5)
     Check-Radio.ps1
     Check Radio.cmd
     Stop Radio.cmd
@@ -718,7 +721,15 @@ end)
 
 ## 5. Copy the launcher and sampling settings
 
-Copy `Radio.ps1`, `Check-Radio.ps1`, `Check Radio.cmd`, and `Stop Radio.cmd` from `payload` into `C:\MPV`. This launcher opens **one MPV**; it contains no crossfade engine. Windows PowerShell 5.1 is sufficient. The task's `-WindowStyle Hidden` flag requests a hidden PowerShell window, and MPV terminal output is disabled. MPV's playback window stays available.
+Copy `Radio.ps1`, `Radio-Hidden.cs`, `Build-HiddenStarter.ps1`, `Check-Radio.ps1`, `Check Radio.cmd`, and `Stop Radio.cmd` from `payload` into `C:\MPV`. This launcher opens **one MPV**; it contains no crossfade engine. Windows PowerShell 5.1 and its existing .NET Framework are sufficient.
+
+Build the hidden starter once, from PowerShell or Command Prompt:
+
+```text
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Build-HiddenStarter.ps1"
+```
+
+This creates `C:\MPV\Radio-Hidden.exe` without downloads. It starts the unchanged PowerShell supervisor without creating a console, waits for it, and returns its exit code. MPV's playback window stays available. The build refuses to overwrite an existing helper; stop playback and move that executable into your backup before rebuilding. If compilation or execution is blocked by security policy, stop and report it; do not disable protection. The guided installer performs this build and backup automatically after confirmation.
 
 Create `C:\MPV\portable_config\script-opts\random-start.conf` with:
 
@@ -737,7 +748,7 @@ Use Notepad's **All files** save type. `section_mode=no` turns off sampling. `fa
 In Command Prompt run:
 
 ```bat
-powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 180
+"C:\MPV\Radio-Hidden.exe" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 180
 ```
 
 There should be one MPV window. Press **F8** in it for the Lua version and settings. Open **Check Radio.cmd** for a live MPV/Lua acknowledgement: one PASS with sampling enabled, cutoff `15`, and range `10` to `30`. Listen for the selected speaker. A three-minute session checks startup and stopping; it is shorter than the normal sample allowance.
@@ -759,13 +770,13 @@ On **Actions**, create exactly one **Start a program** action:
 **Program/script:**
 
 ```text
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+C:\MPV\Radio-Hidden.exe
 ```
 
 **Add arguments:**
 
 ```text
--NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
+-Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 ```
 
 **Start in:**
@@ -774,7 +785,7 @@ C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
 C:\MPV
 ```
 
-Use your Windows folder if it is not `C:\Windows`. Remove any older `taskkill` and direct `mpv.exe` actions from this task; the single launcher replaces them.
+Build the helper in step 5 before saving this action. Remove any older `taskkill` and direct `mpv.exe` actions from this task; the single launcher replaces them.
 
 **Maximum runtime is a DURATION, not the time of day to stop.** `10800` seconds = three hours, `5400` = 90 minutes, `2700` = 45 minutes. The runtime includes loading and pauses. The launcher and Lua both enforce it across track changes. The installer accepts numbers in hours only, up to 24: `1`, `1.5`, `11.5`, or `24`. Manual task arguments still use seconds: multiply the hours by 3600; the maximum is `86400` seconds.
 
@@ -787,7 +798,7 @@ On **Settings**, allow on-demand execution, leave missed-start catch-up off, ret
 Repeat with name **Music - Day Finisher**, weekly at **15:45**, Monday-Friday, and these arguments:
 
 ```text
--NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
+-Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 ```
 
 Keep the same executable and working directory. A new radio session stops the previous radio for this installation before starting its one player. Unrelated MPV windows are left alone. Both schedules share history.
@@ -802,6 +813,6 @@ YouTube loading can leave gaps. If the launcher is forcibly ended, the visible M
 
 For clipboard playback, copy `Play-YouTube.ps1` and both `Play YouTube ... .cmd` files from `payload` into `C:\MPV`. Create desktop shortcuts to the CMD files. Copy one YouTube URL and open the audio or video shortcut. It validates the link, stops this radio and opens manual playback with radio scripts disabled. Video is capped at 720p with best available audio and an always-on-top window. Copy `Update yt-dlp.cmd` if wanted.
 
-For an existing installation, follow [the README upgrade steps](README.md#update-an-existing-working-computer). Tasks already using `Radio.ps1` keep their actions. Copy the full updated payload to replace the old crossfade controller; it now launches only one MPV. Keep `mpv.conf` and histories. No reinstall of MPV is required.
+For an existing installation, follow [the README upgrade steps](README.md#update-an-existing-working-computer). Tasks already using `Radio.ps1` need only the hidden helper and action change; do not replace playback or history files for this fix. Older crossfade installations need the full payload upgrade. Keep `mpv.conf` and histories. No reinstall of MPV is required. Hidden startup failures return a nonzero **Last Run Result** and, when the folder is writable, save the latest error to `C:\MPV\Radio-Hidden-error.log`; check its timestamp because a later successful run does not erase it.
 
 MPV provides the player controls, Lua runtime, seeking, shuffle, audio routing and [JSON IPC](https://mpv.io/manual/stable/#json-ipc). This project adds Windows schedules, history and section selection. See [THIRD_PARTY.md](THIRD_PARTY.md) for separately installed dependencies.

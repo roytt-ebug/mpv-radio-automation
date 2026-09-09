@@ -1,4 +1,4 @@
-# MPV Radio Automation setup helper, guided setup revision 5.
+# MPV Radio Automation setup helper, guided setup revision 6.
 # Requires Windows PowerShell 5.1. MPV must already be installed in C:\MPV.
 # -FunctionsOnly is for offline parser tests; it does not run installation.
 param(
@@ -182,8 +182,8 @@ function Read-MusicSession([string]$Name, [string]$DefaultTime, [string]$Default
 
 function New-MusicTaskDefinition($Session, [string]$UserSid, [string]$MpvFolder) {
     $seconds = $Session.Runtime.TotalSeconds.ToString([cultureinfo]::InvariantCulture)
-    $arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $MpvFolder + '\Radio.ps1" -Playlist "' + $Session.Playlist + '" -DurationSeconds ' + $seconds
-    $play = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $arguments -WorkingDirectory $MpvFolder
+    $arguments = '-Playlist "' + $Session.Playlist + '" -DurationSeconds ' + $seconds
+    $play = New-ScheduledTaskAction -Execute (Join-Path $MpvFolder 'Radio-Hidden.exe') -Argument $arguments -WorkingDirectory $MpvFolder
     $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek ([System.DayOfWeek[]]$Session.Days) -At $Session.At
     $settings = New-ScheduledTaskSettingsSet -WakeToRun -ExecutionTimeLimit ($Session.Runtime + (New-TimeSpan -Minutes 1)) -RestartInterval (New-TimeSpan -Minutes 5) -RestartCount 3 -MultipleInstances IgnoreNew
     $principal = New-ScheduledTaskPrincipal -UserId $UserSid -LogonType Interactive -RunLevel Limited
@@ -213,7 +213,7 @@ try {
     }
     $sid = New-Object Security.Principal.SecurityIdentifier($TaskUserSid)
     $taskUser = $sid.Translate([Security.Principal.NTAccount]).Value
-    Write-Host "`nMPV Radio Automation - guided setup (revision 5)" -ForegroundColor Cyan
+    Write-Host "`nMPV Radio Automation - guided setup (revision 6)" -ForegroundColor Cyan
     Write-Host 'Type only your answer, then press Enter. Do not type the prompt or [brackets].'
     Write-Host 'Press Enter to accept a displayed default. Type Q at any input prompt to cancel.'
     Write-Host ("Computer time now: " + (Get-Date).ToString('yyyy-MM-dd HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture))
@@ -225,7 +225,7 @@ try {
             throw "Missing $InstallDir\$exe. Install MPV yourself first, then rerun INSTALL.cmd."
         }
     }
-    $payloadFiles = @('Radio.ps1','Play-YouTube.ps1','Check-Radio.ps1','Check Radio.cmd','Stop Radio.cmd','portable_config\script-opts\random-start.conf','portable_config\scripts\random-start.lua','Play YouTube on MPV Audio.cmd','Play YouTube Video - 720p Best Audio Always On Top.cmd','Update yt-dlp.cmd','README-LOCAL.txt')
+    $payloadFiles = @('Radio-Hidden.cs','Build-HiddenStarter.ps1','Radio.ps1','Play-YouTube.ps1','Check-Radio.ps1','Check Radio.cmd','Stop Radio.cmd','portable_config\script-opts\random-start.conf','portable_config\scripts\random-start.lua','Play YouTube on MPV Audio.cmd','Play YouTube Video - 720p Best Audio Always On Top.cmd','Update yt-dlp.cmd','README-LOCAL.txt')
     foreach ($relative in $payloadFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $PayloadDir $relative) -PathType Leaf)) {
             throw "Missing payload file: $relative. Extract the WHOLE project ZIP before running INSTALL.cmd."
@@ -282,7 +282,7 @@ try {
     $otherMpv = @($existing | Where-Object {
         $_.TaskName -notin @($sessions | ForEach-Object { $_.Name }) -and
         @($_.Actions | Where-Object {
-            $_.Execute -ieq "$InstallDir\mpv.exe" -or $_.Arguments -like ('*' + $InstallDir + '\Radio.ps1*')
+            $_.Execute -ieq "$InstallDir\mpv.exe" -or $_.Execute -ieq "$InstallDir\Radio-Hidden.exe" -or $_.Arguments -like ('*' + $InstallDir + '\Radio.ps1*')
         }).Count -gt 0
     })
     foreach ($old in $otherMpv) { Write-Warning "Existing task '$($old.TaskName)' will remain unchanged. Check for overlapping schedules." }
@@ -290,6 +290,7 @@ try {
     Write-Host 'Sampling ON: recordings 15+ minutes; sections 10-30 minutes (or remaining content).'
     Write-Host 'Only this installation''s radio player is stopped when the next radio session starts.'
     Write-Host 'The launcher and Lua enforce your duration; Task Scheduler allows one extra minute for cleanup.'
+    Write-Host 'Setup builds Radio-Hidden.exe from included source using Windows .NET; PowerShell runs without a console.'
     Write-Host 'Tasks require the selected user to be logged in. Locked is OK. AC-power conditions are retained.'
     Write-Host 'Wake request ON; catch-up after a missed start OFF; retry 5 minutes x 3; ignore duplicate task starts.'
     Write-Host 'A start time already passed today waits for the next selected day. Use Run in Task Scheduler to test now.'
@@ -315,7 +316,7 @@ try {
     $stage = 'backing up existing settings'
     $backup = Join-Path $InstallDir ('setup-backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
-    foreach ($relative in (@('portable_config\mpv.conf') + $payloadFiles)) {
+    foreach ($relative in (@('portable_config\mpv.conf','Radio-Hidden.exe') + $payloadFiles)) {
         $source = Join-Path $InstallDir $relative
         if (Test-Path -LiteralPath $source -PathType Leaf) {
             $destination = Join-Path $backup $relative
@@ -328,6 +329,9 @@ try {
             Export-ScheduledTask -TaskName $session.Name -TaskPath '\' | Set-Content -LiteralPath (Join-Path $backup ($session.Name + '.xml')) -Encoding Unicode
         }
     }
+    $stage = 'building the hidden-start helper'
+    $builtStarter = Join-Path $backup 'Radio-Hidden.new.exe'
+    & (Join-Path $PayloadDir 'Build-HiddenStarter.ps1') -OutputPath $builtStarter
     $stage = 'downloading yt-dlp if missing'
     if (-not (Test-Path -LiteralPath "$InstallDir\yt-dlp.exe")) {
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -344,6 +348,7 @@ try {
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $PayloadDir $relative) -Destination $destination -Force
     }
+    Move-Item -LiteralPath $builtStarter -Destination (Join-Path $InstallDir 'Radio-Hidden.exe') -Force
     $configLines = [string[]]@("audio-device=$($audio.Id)",'vid=no','ytdl-format=bestaudio/best','force-window=yes')
     [IO.File]::WriteAllLines("$InstallDir\portable_config\mpv.conf", $configLines, (New-Object Text.UTF8Encoding($false)))
     foreach ($session in $sessions) {

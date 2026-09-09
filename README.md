@@ -35,7 +35,7 @@ A 15-minute recording cannot supply a 30-minute sample. Its allowance is capped 
 5. Enter schedules using the examples below, review the summary, and type **YES** to save. Existing matching files/tasks are backed up first; playback histories are retained. Missing yt-dlp is downloaded from upstream only after approval.
 6. In Task Scheduler, right-click a configured task and choose **Run**. Check the speaker, playlist, and repeat behavior before waiting for the next scheduled start.
 
-The guided installer is **revision 5** and now creates a single-player launcher action for each radio task. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
+The guided installer is **revision 6**. It builds the small `Radio-Hidden.exe` starter from included source using Windows' existing .NET Framework, then creates one starter action per radio task. No extra download or developer tools are needed. PowerShell still supervises the same single MPV player, without a console window. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
 
 ### Exactly what to type
 
@@ -107,11 +107,36 @@ Only one radio script should write these history files at a time. Scheduled laun
 
 ## Update an existing working computer
 
-GitHub changes do not automatically update your PC. This update removes crossfade while keeping sampling and history.
+GitHub changes do not automatically update your PC. **This update adds only the hidden-start helper; `Radio.ps1`, Lua, sampling settings and all three histories are unchanged.**
+
+### Hidden-start-only upgrade (already using Radio.ps1)
+
+No reinstall or replacement of `portable_config` is needed.
+
+1. Stop the music using **Stop Radio.cmd**. Export your music tasks as a backup.
+2. Download a fresh repository ZIP. Copy only `payload/Radio-Hidden.cs` and `payload/Build-HiddenStarter.ps1` into `C:\MPV`. Keep your existing `Radio.ps1`, Lua, settings and histories.
+3. In PowerShell or Command Prompt run this once:
+
+   ```text
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Build-HiddenStarter.ps1"
+   ```
+
+   It builds `C:\MPV\Radio-Hidden.exe` locally. It will not overwrite an existing helper: for a future rebuild, stop the radio and move the old executable into your backup first. If Windows/security policy blocks compilation or execution, stop and report it; do not disable protection.
+4. In each music task's **Properties -> Actions -> Edit**, change **Program/script** to `C:\MPV\Radio-Hidden.exe`. Remove the PowerShell options through `-File "C:\MPV\Radio.ps1"` from **Add arguments**. Keep the `-Playlist` and `-DurationSeconds` values exactly as they were. Keep **Start in** as `C:\MPV` and leave triggers, conditions and runtime settings alone. For example, a two-hour Day Finisher uses:
+
+   ```text
+   -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 7200
+   ```
+
+5. Run the task. Check the MPV controls, F8 and **Check Radio.cmd**, then **Stop Radio.cmd**. Scheduled starts should no longer create a PowerShell terminal. Manually opened diagnostic/CMD windows are intentionally unchanged.
+
+To undo just this update, restore the exported task actions; no playback or history files need changing. On failure, check Task Scheduler's **Last Run Result** and `C:\MPV\Radio-Hidden-error.log`. The log contains the latest helper/PowerShell failure, is bounded, and is not erased on success: check its timestamp. If that folder is unwritable, the nonzero task result is still returned but the log may be unavailable.
+
+### Older installations (including the former crossfade build)
 
 1. Stop the music task and close its MPV windows. Back up `portable_config` outside its `scripts` folder and export the music tasks.
 2. Download and extract a fresh repository ZIP. Copy the **contents of `payload` into `C:\MPV`**, replacing included files. Copy all files, including `Play-YouTube.ps1`; do not replace just the Lua script. The payload contains no `mpv.conf` or history files, so your speaker and histories are retained. Its `random-start.conf` supplies the defaults above; keep your backup if you customized settings.
-3. **If your task already runs `Radio.ps1`, add `-NonInteractive -WindowStyle Hidden` before `-File` in its arguments.** Keep the existing executable, playlist, duration and triggers. The updated `Radio.ps1` also disables MPV's terminal output; its normal player window remains available.
+3. Build `Radio-Hidden.exe` using the command above, then use the new helper action. Keep your existing playlist, duration and triggers. MPV's normal player window remains available.
 4. **If your older task runs taskkill followed by `mpv.exe`,** replace those two actions with the single action in [manual step 7](MANUAL-SETUP.md#7-create-the-morning-task-manually). Preserve your triggers, days and intended duration. Disable duplicate legacy tasks that still kill all MPV windows.
 5. Run a music task. Confirm one MPV window, press F8, and run **Check Radio.cmd**. Listen through a sample transition.
 
@@ -119,7 +144,7 @@ The old crossfade version may leave `radio-session.json` behind. The new code do
 
 ## Scheduler and installation safeguards
 
-Each task runs one PowerShell launcher action with `-NonInteractive -WindowStyle Hidden`. MPV starts with its terminal disabled; its normal playback window stays available. These are standard Windows/MPV options, with no additional launcher. A new session asks the previous radio launcher for the same installation to stop and waits before opening one MPV. Normal shutdown asks MPV to quit and save history; forced cleanup is restricted to the exact process started by that launcher.
+Each task runs one `Radio-Hidden.exe` action. This launch-only helper starts the adjacent, unchanged `Radio.ps1` with Windows' **CreateNoWindow** setting, waits for it and returns its exit code to Task Scheduler. It does not choose tracks, change volume, manage history or replace the supervisor's stop logic. MPV starts with its terminal disabled; its normal playback window stays available. A new session asks the previous radio launcher for the same installation to stop and waits before opening one MPV. Normal shutdown asks MPV to quit and save history; forced cleanup is restricted to the exact process started by that launcher.
 
 The launcher and Lua independently enforce the requested runtime. If the launcher is forcibly terminated, MPV can remain open until its Lua session limit; close its visible window or use Stop Radio. Task Scheduler's backup stop limit is one minute longer than the intended duration to allow cleanup.
 
@@ -129,7 +154,7 @@ Setup validates inputs, shows a review before saving, and backs up replaced conf
 
 Clipboard shortcuts accept one YouTube URL and pass it directly to MPV without placing pasted text in a Command Prompt command. They stop only this installation's radio before opening manual playback.
 
-Windows Terminal has a [documented issue with `-WindowStyle Hidden`](https://github.com/microsoft/terminal/issues/12464), so some installations can still show a terminal despite the requested hidden state. If it persists, report the behavior before applying a further workaround.
+Windows Terminal has a [documented issue with `-WindowStyle Hidden`](https://github.com/microsoft/terminal/issues/12464). The helper avoids creating a PowerShell console in the first place, using [Windows' documented no-window process setting](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.processstartinfo.createnowindow). It does not change the default terminal application or security policies. It is built locally from reviewable source, not supplied as an opaque downloaded executable. Managed computers may restrict local compilation or unsigned executables; report such restrictions rather than bypassing them.
 
 ## Troubleshooting and checks
 

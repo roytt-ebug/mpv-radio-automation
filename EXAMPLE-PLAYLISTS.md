@@ -1,6 +1,6 @@
 # Sample music playlists
 
-These contributor-approved samples are now shown **inside guided setup (revision 5)**. At either task's playlist prompt, type **S** and press Enter to use the sample shown for that task. You may instead paste your own URL, or press Enter without typing to skip. A blank answer never automatically selects music and leaves an existing task unchanged.
+These contributor-approved samples are now shown **inside guided setup (revision 6)**. At either task's playlist prompt, type **S** and press Enter to use the sample shown for that task. You may instead paste your own URL, or press Enter without typing to skip. A blank answer never automatically selects music and leaves an existing task unchanged.
 
 ## Morning Music
 
@@ -32,23 +32,23 @@ The installer suggests **15:45 (3:45 PM), Monday-Friday, for three hours**. Choo
 
 Updating this repository does **not** change tasks already saved on your PC. There is no need to reinstall MPV or replace the Lua script just to change playlists.
 
-1. Open the existing task's **Properties -> Actions** and edit its PowerShell launcher action.
+1. Open the existing task's **Properties -> Actions** and edit its radio launcher action.
 2. Change only the URL after `-Playlist`. Keep the `-DurationSeconds` value, triggers, and days.
-3. If the task still has the old taskkill + direct-MPV actions, first follow [the launcher upgrade instructions](README.md#update-an-existing-working-computer).
+3. The full examples below are for the new hidden helper. If the task still launches PowerShell or has the old taskkill + direct-MPV actions, follow [the launcher upgrade instructions](README.md#update-an-existing-working-computer) before changing executable/arguments. For a playlist-only edit, simply replace the URL in your current arguments.
 
 **Morning Music - Add arguments (three hours):**
 
 ```text
--NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
+-Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 ```
 
 **Day Finisher - Add arguments (three hours):**
 
 ```text
--NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
+-Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 ```
 
-The executable is `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, with `C:\MPV` as **Start in**. In the installer enter **S** or only the URL; it supplies the command automatically. **S is an installer choice, not a player command.**
+The executable is `C:\MPV\Radio-Hidden.exe`, with `C:\MPV` as **Start in**. The installer builds that helper and supplies the command automatically; enter **S** or only the URL. **S is an installer choice, not a player command.**
 
 ## Availability and privacy
 
