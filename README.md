@@ -52,11 +52,13 @@ Type only your answer, not the prompt or brackets. Enter accepts a displayed def
 | Days | `1` / `2` / `3` / `4` | Monday-Friday / Monday-Saturday / every day / weekends. |
 | Custom days | `MON,WED,FRI` | Only those days. |
 | Maximum runtime | `3` | Three hours. |
-| Maximum runtime | `1.5` or `1:30` | One hour thirty minutes. |
-| Maximum runtime | `45 min` | Forty-five minutes. |
+| Maximum runtime | `1.5` | One hour thirty minutes. |
+| Maximum runtime | `0.75` | Forty-five minutes. |
+| Maximum runtime | `11.5` | Eleven hours thirty minutes. |
+| Maximum runtime | `24` | Twenty-four hours; the maximum. |
 | Confirmation | `YES` | Apply the reviewed changes; Enter defaults to NO. |
 
-**Maximum runtime is a DURATION, not the time of day to stop.** A start of 18:35 plus 1.5 hours has an approximate stop of 20:05, assuming an on-time uninterrupted run. Defaults remain Morning **06:45, Mon-Sat, 3 hours** and Day Finisher **15:45, Mon-Fri, 3 hours**. All clock times use the computer's local time.
+**Maximum runtime is a DURATION, not the time of day to stop.** Enter a number of hours only, using a decimal point for fractions. `45` and `96` exceed the 24-hour maximum; `45 min`, `1:30` and unit words are rejected. A start of 18:35 plus 1.5 hours has an approximate stop of 20:05, assuming an on-time uninterrupted run. Defaults remain Morning **06:45, Mon-Sat, 3 hours** and Day Finisher **15:45, Mon-Fri, 3 hours**. All clock times use the computer's local time.
 
 The installer validates URL structure, not playlist existence or playback rights. Share/index/time parameters are removed from scheduled playlist URLs. Skipping a task does not disable or remove an existing task; use Task Scheduler for that.
 
@@ -109,7 +111,7 @@ GitHub changes do not automatically update your PC. This update removes crossfad
 
 1. Stop the music task and close its MPV windows. Back up `portable_config` outside its `scripts` folder and export the music tasks.
 2. Download and extract a fresh repository ZIP. Copy the **contents of `payload` into `C:\MPV`**, replacing included files. Copy all files, including `Play-YouTube.ps1`; do not replace just the Lua script. The payload contains no `mpv.conf` or history files, so your speaker and histories are retained. Its `random-start.conf` supplies the defaults above; keep your backup if you customized settings.
-3. **If your task already runs `Radio.ps1`, keep its action, playlist and duration.** That filename now launches one player. No task recreation is needed.
+3. **If your task already runs `Radio.ps1`, add `-NonInteractive -WindowStyle Hidden` before `-File` in its arguments.** Keep the existing executable, playlist, duration and triggers. The updated `Radio.ps1` also disables MPV's terminal output; its normal player window remains available.
 4. **If your older task runs taskkill followed by `mpv.exe`,** replace those two actions with the single action in [manual step 7](MANUAL-SETUP.md#7-create-the-morning-task-manually). Preserve your triggers, days and intended duration. Disable duplicate legacy tasks that still kill all MPV windows.
 5. Run a music task. Confirm one MPV window, press F8, and run **Check Radio.cmd**. Listen through a sample transition.
 
@@ -117,7 +119,7 @@ The old crossfade version may leave `radio-session.json` behind. The new code do
 
 ## Scheduler and installation safeguards
 
-Each task runs one PowerShell launcher action. A new session asks the previous radio launcher for the same installation to stop and waits before opening one MPV. Normal shutdown asks MPV to quit and save history; forced cleanup is restricted to the exact process started by that launcher.
+Each task runs one PowerShell launcher action with `-NonInteractive -WindowStyle Hidden`. MPV starts with its terminal disabled; its normal playback window stays available. These are standard Windows/MPV options, with no additional launcher. A new session asks the previous radio launcher for the same installation to stop and waits before opening one MPV. Normal shutdown asks MPV to quit and save history; forced cleanup is restricted to the exact process started by that launcher.
 
 The launcher and Lua independently enforce the requested runtime. If the launcher is forcibly terminated, MPV can remain open until its Lua session limit; close its visible window or use Stop Radio. Task Scheduler's backup stop limit is one minute longer than the intended duration to allow cleanup.
 
@@ -126,6 +128,8 @@ Tasks require the chosen Windows user to remain logged in; a locked session is o
 Setup validates inputs, shows a review before saving, and backs up replaced configuration, matching tasks and shortcuts under `C:\MPV\setup-backups`. It stops its radio before updating and asks you to close other MPV windows from that installation. Unexpected failures show a stage and error-log path. Partial installation has **no automatic rollback**; use the backup and inspect tasks before retrying. Skipping an existing task leaves it unchanged.
 
 Clipboard shortcuts accept one YouTube URL and pass it directly to MPV without placing pasted text in a Command Prompt command. They stop only this installation's radio before opening manual playback.
+
+Windows Terminal has a [documented issue with `-WindowStyle Hidden`](https://github.com/microsoft/terminal/issues/12464), so some installations can still show a terminal despite the requested hidden state. If it persists, report the behavior before applying a further workaround.
 
 ## Troubleshooting and checks
 

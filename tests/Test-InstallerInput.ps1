@@ -46,10 +46,10 @@ Assert-Equal ((ConvertTo-MusicDays '4') -join ',') 'Saturday,Sunday' 'weekends'
 Assert-Equal ((ConvertTo-MusicDays 'mon, WED,friday,MON') -join ',') 'Monday,Wednesday,Friday' 'custom deduplicated days'
 Assert-Equal ((ConvertTo-MusicDays 'MON-FRI') -join ',') 'Monday,Tuesday,Wednesday,Thursday,Friday' 'named preset'
 foreach ($bad in @('','5','MON-FUN','1,2','FUNDAY')) { Assert-Rejected { ConvertTo-MusicDays $bad } ('bad days ' + $bad) }
-foreach ($case in @(@('3',180),@('1.5',90),@('1:30',90),@('45 min',45),@('0.5',30),@('24 hours',1440),@('1m',1))) {
+foreach ($case in @(@('1',60),@('3',180),@('1.5',90),@('11.5',690),@('0.5',30),@('0.75',45),@('24',1440),@(' 2 ',120))) {
     Assert-Equal (ConvertTo-MusicRuntime $case[0]).TotalMinutes $case[1] ('runtime ' + $case[0])
 }
-foreach ($bad in @('','0','-2','25','1:90','1,5','6:35 PM','999999999999999999999999 hours')) {
+foreach ($bad in @('','0','-2','25','45','96','0.001','1:30','1:90','45 min','24 hours','1m','1,5','6:35 PM','NaN','Infinity','999999999999999999999999')) {
     Assert-Rejected { ConvertTo-MusicRuntime $bad } ('bad runtime ' + $bad)
 }
 Assert-Equal (ConvertTo-YouTubePlaylist '') '' 'blank skips playlist'
@@ -111,13 +111,13 @@ try {
     Assert-Equal $session.At.ToString('HH:mm') '06:45' 'morning time unchanged'
     Assert-Equal $session.Days.Count 6 'morning days unchanged'
     Assert-Equal $session.Runtime.TotalMinutes 180 'morning runtime unchanged'
-    foreach ($answer in @('s','1708','2','45 min')) { $script:answers.Enqueue($answer) }
+    foreach ($answer in @('s','1708','2','0.75')) { $script:answers.Enqueue($answer) }
     $session = Read-MusicSession 'Music - Day Finisher' '15:45' '1'
     Assert-Equal $session.Playlist $finisherSample 'finisher s end to end'
     Assert-Equal $session.At.ToString('HH:mm') '17:08' 'custom time with sample'
     Assert-Equal $session.Days.Count 6 'custom days with sample'
     Assert-Equal $session.Runtime.TotalMinutes 45 'custom runtime with sample'
-    foreach ($answer in @('bad','https://youtube.com/playlist?list=PL_CUSTOM&si=x','','','1:30')) { $script:answers.Enqueue($answer) }
+    foreach ($answer in @('bad','https://youtube.com/playlist?list=PL_CUSTOM&si=x','','','1.5')) { $script:answers.Enqueue($answer) }
     $session = Read-MusicSession 'Music - Day Finisher' '15:45' '1'
     Assert-Equal $session.Playlist 'https://www.youtube.com/playlist?list=PL_CUSTOM' 'retry then custom playlist'
     Assert-Equal $session.Runtime.TotalMinutes 90 'runtime format still accepted'
@@ -147,6 +147,8 @@ if ($env:OS -eq 'Windows_NT') {
     Assert-Equal $task.Actions.Count 1 'one radio launcher action'
     Assert-Equal $task.Actions[0].Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" 'PowerShell launcher executable'
     Assert-Equal $task.Actions[0].WorkingDirectory 'C:\MPV' 'working folder'
+    Assert-Equal $task.Actions[0].Arguments.Contains('-WindowStyle Hidden') $true 'scheduled PowerShell window hidden'
+    Assert-Equal $task.Actions[0].Arguments.Contains('-NonInteractive') $true 'scheduled launcher cannot wait for terminal input'
     Assert-Equal ([xml.xmlconvert]::ToTimeSpan($task.Settings.ExecutionTimeLimit)).TotalMinutes 91 '90 minutes plus one minute safety cleanup'
     Assert-Equal $task.Actions[0].Arguments.Contains('-DurationSeconds 5400') $true 'launcher enforces the requested 90 minutes'
     Assert-Equal $task.Settings.WakeToRun $true 'wake enabled'

@@ -26,7 +26,7 @@ https://www.youtube.com/playlist?list=PLBejJIaDgbyQ
 
 The installer suggests **15:45 (3:45 PM), Monday-Friday, for three hours**. Choose a different time, set of days, or runtime when needed.
 
-**Maximum runtime is a DURATION, not the time of day to stop.** For example, `3` means three hours after launch, not 3 PM. `1.5` or `1:30` means ninety minutes; `45 min` means forty-five minutes.
+**Maximum runtime is a DURATION, not the time of day to stop.** For example, `3` means three hours after launch, not 3 PM. Enter hours only: `1.5` means ninety minutes, `0.75` means forty-five minutes, and `11.5` means eleven hours thirty minutes. The maximum is `24`. Do not enter `1:30` or unit words.
 
 ## Using these links on an already configured computer
 
@@ -39,13 +39,13 @@ Updating this repository does **not** change tasks already saved on your PC. The
 **Morning Music - Add arguments (three hours):**
 
 ```text
--NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
+-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 ```
 
 **Day Finisher - Add arguments (three hours):**
 
 ```text
--NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
+-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 ```
 
 The executable is `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, with `C:\MPV` as **Start in**. In the installer enter **S** or only the URL; it supplies the command automatically. **S is an installer choice, not a player command.**

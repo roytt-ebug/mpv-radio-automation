@@ -95,10 +95,12 @@ try {
     $start.FileName = $MpvExecutable
     $start.WorkingDirectory = $MpvFolder
     $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
     $start.Arguments = Join-NativeArguments @(
         "--config-dir=$MpvFolder\portable_config", '--load-scripts=no', "--script=$lua",
         "--script-opts-append=random-start-session_seconds=$seconds", "--input-ipc-server=$endpoint",
         '--shuffle', '--loop-playlist=inf', '--loop-file=no', '--vid=no', '--force-window=yes',
+        '--terminal=no', '--input-terminal=no',
         '--', $Playlist
     )
     $clock = [Diagnostics.Stopwatch]::StartNew()
