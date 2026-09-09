@@ -288,6 +288,7 @@ try {
             $fraction=1.0
             if ($fadeSeconds -gt 0) { $fraction=$fadeElapsed/$fadeSeconds }
             $gains=Get-FadeGains $fraction $volume
+            Write-Verbose ("Fade {0}->{1}: remaining={2:N2}, progress={3:N2}, fraction={4:N2}, gains={5:N1}/{6:N1}" -f $active.Name,$spare.Name,$current.remaining,$fadeElapsed,$fraction,$gains[0],$gains[1])
             Set-DeckVolume $active $gains[0]; Set-DeckVolume $spare $gains[1]
             if ($now-$stallSince -gt 15) { throw 'The incoming track stalled during crossfade. Stopping so the scheduled retry can recover.' }
             if ($fraction -ge 1 -or ($current.remaining -ge 0 -and $current.remaining -le 0.05 -and $fadeElapsed -gt 0)) {

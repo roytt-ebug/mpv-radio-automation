@@ -19,26 +19,29 @@ mpv = shutil.which('mpv')
 assert powershell and mpv, 'PowerShell and MPV are required'
 
 
-def query(endpoint, name):
-    if os.name == 'nt':
-        stream = open(r'\\.\pipe' + chr(92) + endpoint, 'r+b', buffering=0)
-        sock = None
-    else:
-        sock = socket.socket(socket.AF_UNIX)
-        sock.settimeout(2)
-        sock.connect(endpoint)
-        stream = sock.makefile('rwb', buffering=0)
-    try:
-        stream.write((json.dumps({'command': ['get_property', name], 'request_id': 99}) + '\n').encode())
+class Probe:
+    def __init__(self, endpoint):
+        if os.name == 'nt':
+            self.stream = open(r'\\.\pipe' + chr(92) + endpoint, 'r+b', buffering=0)
+            self.sock = None
+        else:
+            self.sock = socket.socket(socket.AF_UNIX)
+            self.sock.settimeout(2)
+            self.sock.connect(endpoint)
+            self.stream = self.sock.makefile('rwb', buffering=0)
+
+    def query(self, name):
+        self.stream.write((json.dumps({'command': ['get_property', name], 'request_id': 99}) + '\n').encode())
         while True:
-            result = json.loads(stream.readline())
+            result = json.loads(self.stream.readline())
             if result.get('request_id') == 99:
                 assert result['error'] == 'success', result
                 return result.get('data')
-    finally:
-        stream.close()
-        if sock:
-            sock.close()
+
+    def close(self):
+        self.stream.close()
+        if self.sock:
+            self.sock.close()
 
 
 with tempfile.TemporaryDirectory(prefix='radio-crossfade-') as directory:
@@ -66,7 +69,10 @@ with tempfile.TemporaryDirectory(prefix='radio-crossfade-') as directory:
     with log.open('w') as output:
         process = subprocess.Popen([powershell, '-NoProfile', '-File', str(root / 'payload/Radio.ps1'),
             '-Playlist', str(playlist), '-MpvFolder', str(work), '-MpvExecutable', mpv,
-            '-DurationSeconds', '27'], stdout=output, stderr=subprocess.STDOUT)
+            '-DurationSeconds', '27', '-Verbose'], stdout=output, stderr=subprocess.STDOUT)
+    probes = {}
+    probe_errors = []
+    probe_states = []
     overlap = False
     overlap_samples = 0
     observed_gains = []
@@ -80,29 +86,41 @@ with tempfile.TemporaryDirectory(prefix='radio-crossfade-') as directory:
                     session = json.loads(session_path.read_text())
                     decks = []
                     for endpoint in session['endpoints']:
-                        status = json.loads(query(endpoint, 'user-data/radio-status'))
-                        volume = query(endpoint, 'volume')
-                        status['position'] = query(endpoint, 'time-pos')
-                        status['paused'] = query(endpoint, 'pause')
+                        if endpoint not in probes:
+                            probes[endpoint] = Probe(endpoint)
+                        probe = probes[endpoint]
+                        status = json.loads(probe.query('user-data/radio-status'))
+                        volume = probe.query('volume')
+                        status['position'] = probe.query('time-pos')
+                        status['paused'] = probe.query('pause')
                         old = positions.get(endpoint, -1)
                         decks.append((status, volume, old))
                         positions[endpoint] = status['position']
+                    if session['fading']:
+                        probe_states.append([[s['playing'], s['paused'], round(s['position'], 2), round(old, 2), round(v, 1)] for s, v, old in decks])
                     if all(s['playing'] and not s['paused'] and v > 5 and s['position'] > old for s, v, old in decks):
                         overlap = True
                         overlap_samples += 1
                         observed_gains.append([round(v, 1) for _, v, _ in decks])
-                except (OSError, ValueError, AssertionError):
-                    pass  # Player can finish or atomically update between probe requests.
+                except (OSError, ValueError, AssertionError) as error:
+                    if len(probe_errors) < 5:
+                        probe_errors.append(repr(error))
+                    # A paused idle deck can have no time-pos yet; retry next poll.
             time.sleep(0.15)
         code = process.wait(timeout=5)
     finally:
+        for probe in probes.values():
+            probe.close()
         if process.poll() is None:
             process.kill()
             process.wait()
     print(log.read_text())
     print('Overlap probes:', overlap_samples, 'gain pairs:', observed_gains[:16])
+    print('Probe errors:', probe_errors)
+    print('Fade probe states:', probe_states[:16])
     assert code == 0, f'controller exit status {code}'
     assert overlap, 'Never observed two advancing, audible-gain streams simultaneously'
+    assert any(5 < a < 95 and 5 < b < 95 for a, b in observed_gains), 'No intermediate fade gains observed'
     rows = (config / 'recent-track-history.txt').read_text().splitlines()
     assert len(rows) >= 3, 'Did not hear at least three track starts'
     heard = [r.split('|') for r in (config / 'heard-sections.txt').read_text().splitlines() if not r.startswith('#')]
