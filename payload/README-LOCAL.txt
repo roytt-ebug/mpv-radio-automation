@@ -1,91 +1,88 @@
 MPV RADIO AUTOMATION - LOCAL NOTES
 ==================================
+Scheduled Windows background music using MPV + yt-dlp and your selected speaker.
+Short songs play normally. Long recordings favor less-recently-heard sections.
+Optional sampling rotates between long mixes; it is OFF by default.
 
-Main folder:
-C:\MPV
+Main folder: C:\MPV
+Player: C:\MPV\mpv.exe (use mpv.com for console diagnostics)
+YouTube helper: C:\MPV\yt-dlp.exe
+Player configuration: C:\MPV\portable_config\mpv.conf
+Radio script: C:\MPV\portable_config\scripts\random-start.lua
 
-Important files:
-C:\MPV\mpv.exe
-C:\MPV\mpv.com
-C:\MPV\yt-dlp.exe
-C:\MPV\portable_config\mpv.conf
-C:\MPV\portable_config\scripts\random-start.lua
+PLAYBACK RULES
+--------------
+Under 20 minutes: no random seek or sampling; normal playback.
+20+ minutes and seekable: choose a less-recently-heard start within 0%-75%.
+Ten accepted track starts persist, independently of the smaller repeat filter.
+Ten selected long-track percentages are retained separately.
 
-History:
-C:\MPV\portable_config\random-start-history.txt
+New per-recording interval history:
+C:\MPV\portable_config\heard-sections.txt
+Final column shows minutes:seconds-minutes:seconds, e.g. 42:37-68:10.
+This estimates forward player activity, not human attention or physical sound.
+Pauses, buffering, mute and detected seeks are excluded. State checkpoints
+normally every 15 seconds; hard termination can lose the unsaved tail.
+The .bak file is a previous complete checkpoint. Only one player should write.
+Defaults: up to 40 intervals per recording, 2000 overall, at most 180 days old.
+
+Existing histories remain:
 C:\MPV\portable_config\recent-track-history.txt
+C:\MPV\portable_config\random-start-history.txt
+Old start logs cannot reconstruct what sections were heard before this update.
 
-The radio script retains the last 10 accepted track starts, including short
-songs. Repeat protection uses a smaller, adaptive window. Tracks under
-20 minutes are not randomly seeked; longer tracks get a 0%-75% random start.
-Manual launchers disable the radio script and do not add to this history.
+OPTIONAL SECTION SAMPLING
+-------------------------
+Create C:\MPV\portable_config\script-opts\random-start.conf with:
+section_mode=yes
+section_min_minutes=20
+section_max_minutes=40
+fade_seconds=5
 
-SAMPLE PLAYLISTS IN GUIDED SETUP (REVISION 3)
---------------------------------------------
-Morning Music:
-https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
+Restart MPV. Long mixes play 20-40 minutes of forward unmuted playback,
+or remaining content if shorter, then fade out and advance. Short songs
+are not cut. Set section_mode=no for uninterrupted long mixes again.
+The fade is not a crossfade or a fade for Task Scheduler's force-stop.
+This optional file is not created by the installer.
 
-Day Finisher:
-https://www.youtube.com/playlist?list=PLBejJIaDgbyQ
-
-At each installer's playlist prompt, type S and press Enter to use the sample
-shown for that task. Or paste your own complete URL. A blank answer skips that
-task and leaves any existing task unchanged. S is an installer choice only;
-do not put S into a Task Scheduler action.
-
-These are optional external playlists. Contents and availability can change.
-
-MAXIMUM RUNTIME
-----------------
+The 20-minute eligibility cutoff, 20-40-minute optional sample length,
+and a task's maximum runtime are three separate settings.
 Maximum runtime is a DURATION, not the time of day to stop.
-3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.
-For example, start 18:35 with a runtime of 1.5 means an approximate stop at
-20:05. Retries, delayed starts or interruptions may change the actual stop.
 
-CHANGE THE PLAYLIST IN AN EXISTING TASK
---------------------------------------
-Open Task Scheduler -> existing music task -> Properties -> Actions.
-Edit the action that starts C:\MPV\mpv.exe (normally the SECOND action).
-Leave the first stop-old-MPV action unchanged.
-
-Morning Music - Add arguments:
+SAMPLE PLAYLISTS AND TASK ARGUMENTS
+----------------------------------
+Morning:
 --shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0"
-
-Day Finisher - Add arguments:
+Day Finisher:
 --shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ"
 
-For both tasks keep:
-Program/script: C:\MPV\mpv.exe
-Start in: C:\MPV
+In Task Scheduler edit the existing SECOND action that runs C:\MPV\mpv.exe.
+Keep Start in: C:\MPV and the first stop-old-MPV action unchanged.
+Do not create duplicate tasks. Keep your preferred times/days/runtime.
+For a fresh installer: S uses the displayed sample, URL uses your own,
+Enter skips that task and leaves any existing task unchanged.
 
-Keep your existing times, days, runtime limits, audio output and Lua settings.
-Save the task. Its new URL is used on its next start. To test immediately,
-right-click the task and choose Run; it stops accessible MPV playback first.
-No reinstallation is needed for a playlist-only change.
-Updating GitHub does not automatically change tasks already on this computer.
+UPDATE ONLY THE RADIO SCRIPT
+-----------------------------
+Close MPV. Back up the old Lua OUTSIDE the scripts folder. Replace
+C:\MPV\portable_config\scripts\random-start.lua with the new version.
+Keep mpv.conf, optional sampling settings and all histories. Restart.
+Do not rerun the installer solely for a Lua update.
+Manual launchers use --load-scripts=no and bypass histories and radio modes.
 
-TROUBLESHOOTING
----------------
-List audio outputs independently of the current configuration:
-C:\MPV\mpv.com --no-config --audio-device=help
-
-If YouTube suddenly stops working, update yt-dlp from upstream:
+TROUBLESHOOTING AND DOCUMENTATION
+---------------------------------
+C:\MPV\mpv.com --no-config --load-scripts=no --audio-device=help
+C:\MPV\yt-dlp.exe --version
 C:\MPV\yt-dlp.exe -U
 
-MPV Windows builds:
-https://github.com/shinchiro/mpv-winbuild-cmake/releases
+Windows must remain logged in; locked is okay. Wake timers/speaker availability
+must permit playback. A powered-off PC is not started by Task Scheduler.
+Current scheduled starts close accessible MPV windows, including manual videos.
+For YouTube failures follow yt-dlp's current JavaScript-runtime guidance.
 
-yt-dlp:
-https://github.com/yt-dlp/yt-dlp/releases/latest
-
-Project documentation:
 https://github.com/roytt-ebug/mpv-radio-automation
-
-Playlist recommendations and instructions:
-https://github.com/roytt-ebug/mpv-radio-automation/blob/main/EXAMPLE-PLAYLISTS.md
-
-MANUAL SETUP WITHOUT THE INSTALLER
-----------------------------------
-A complete step-by-step guide, including the full Lua code and all Task
-Scheduler fields, is in MANUAL-SETUP.md in the downloaded repository, or at:
 https://github.com/roytt-ebug/mpv-radio-automation/blob/main/MANUAL-SETUP.md
+https://github.com/roytt-ebug/mpv-radio-automation/blob/main/EXAMPLE-PLAYLISTS.md
+https://mpv.io/installation/
+https://github.com/yt-dlp/yt-dlp/releases/latest
