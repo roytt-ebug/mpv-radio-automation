@@ -1,4 +1,4 @@
-# MPV Radio Automation setup helper, guided setup revision 6.
+# MPV Radio Automation setup helper, guided setup revision 7.
 # Requires Windows PowerShell 5.1. MPV must already be installed in C:\MPV.
 # -FunctionsOnly is for offline parser tests; it does not run installation.
 param(
@@ -190,6 +190,118 @@ function New-MusicTaskDefinition($Session, [string]$UserSid, [string]$MpvFolder)
     return New-ScheduledTask -Action @($play) -Trigger $trigger -Settings $settings -Principal $principal
 }
 
+function ConvertFrom-DenoVersion([string]$Output) {
+    # Accept stable version output, not a filename, browser version, or mere presence.
+    if ($Output -cnotmatch '\Adeno (?<version>[0-9]+\.[0-9]+\.[0-9]+)(?: \([^\r\n]*\))?(?:\r?\n|\z)') {
+        throw 'Deno returned an unrecognized version. Use an official stable deno.exe.'
+    }
+    $version = [version]$Matches.version
+    if ($version -lt [version]'2.3.0') { throw "Deno $version is too old; YouTube requires Deno 2.3.0 or newer." }
+    return $version
+}
+
+function Get-DenoVersion([string]$Executable, [string]$WorkingDirectory, [int]$TimeoutMilliseconds = 5000) {
+    $info = New-Object Diagnostics.ProcessStartInfo
+    $info.FileName = $Executable
+    $info.Arguments = '--version'
+    $info.WorkingDirectory = $WorkingDirectory
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardInput = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $process = New-Object Diagnostics.Process
+    $process.StartInfo = $info
+    try {
+        if (-not $process.Start()) { throw 'Could not start Deno.' }
+        $process.StandardInput.Close()
+        $output = $process.StandardOutput.ReadToEndAsync()
+        $errors = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            $process.Kill()
+            throw 'Deno version check timed out. Check the executable and Windows security restrictions.'
+        }
+        if ($process.ExitCode -ne 0) { throw "Deno version check failed (exit $($process.ExitCode))." }
+        # Bound waits even if an unexpected descendant keeps an output pipe open.
+        if (-not $output.Wait(1000) -or -not $errors.Wait(1000)) { throw 'Deno version output did not finish.' }
+        return ConvertFrom-DenoVersion $output.Result
+    } finally { $process.Dispose() }
+}
+
+function Get-YouTubeRuntime([string]$MpvFolder, [string]$SearchPath = $env:PATH, [string]$PathExtensions = $env:PATHEXT) {
+    $help = "Download the official Windows x64 Deno ZIP from https://github.com/denoland/deno/releases/latest, extract deno.exe (not denort.exe) into $MpvFolder beside yt-dlp.exe, then rerun INSTALL.cmd. No runtime is installed automatically. Do not disable security protection."
+    # Match the portable yt-dlp Windows search order: binary folder, working
+    # folder (also MpvFolder for our tasks), then PATH, respecting PATHEXT.
+    $extensions = @('.COM','.EXE','.BAT','.CMD')
+    if ($PathExtensions) { $extensions = @($PathExtensions -split ';' | Where-Object { $_ }) }
+    $folders = @($MpvFolder) + @($SearchPath -split ';' | Where-Object { $_ })
+    foreach ($folder in $folders) {
+        $folder = $folder.Trim('"')
+        # Never resolve relative PATH entries against the installer's ZIP folder.
+        if (-not [IO.Path]::IsPathRooted($folder)) { $folder = Join-Path $MpvFolder $folder }
+        foreach ($extension in $extensions) {
+            if ($extension -notmatch '^\.[A-Za-z0-9]+$') { continue }
+            $candidate = Join-Path $folder ('deno' + $extension.ToLowerInvariant())
+            if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+            try {
+                if ($extension -ine '.EXE') { throw "Found $candidate before deno.exe. This check supports the official deno.exe, not command wrappers." }
+                $version = Get-DenoVersion $candidate $MpvFolder
+                return [pscustomobject]@{ Path=$candidate; Version=$version }
+            } catch { throw ($_.Exception.Message + "`n" + $help) }
+        }
+    }
+    throw ("No supported Deno runtime was found for this installation. Node/QuickJS alone are not accepted: yt-dlp does not enable them by default.`n" + $help)
+}
+
+function Get-YtDlpChecksum([string]$Text) {
+    $hashes = @()
+    foreach ($line in ($Text -split '\r?\n')) {
+        if (-not $line.Trim()) { continue }
+        if ($line -cnotmatch '\A(?<hash>[A-Fa-f0-9]{64}) [ *](?<name>[^\r\n]+)\z') {
+            throw 'The upstream SHA2-256SUMS file contains a malformed checksum line.'
+        }
+        if ($Matches.name -ceq 'yt-dlp.exe') { $hashes += $Matches.hash }
+    }
+    if ($hashes.Count -ne 1) { throw 'Expected exactly one yt-dlp.exe entry in upstream SHA2-256SUMS.' }
+    return $hashes[0]
+}
+
+function Install-VerifiedYtDlp([string]$MpvFolder) {
+    $destination = Join-Path $MpvFolder 'yt-dlp.exe'
+    # Do not update or replace an existing executable as part of this check.
+    if (Test-Path -LiteralPath $destination -PathType Leaf) { return }
+    if (Test-Path -LiteralPath $destination) { throw "$destination exists but is not a file." }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    # Resolve latest ONCE; both files must come from the same version even if
+    # upstream publishes another release while installation is running.
+    $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest' -TimeoutSec 30
+    $tag = [string]$release.tag_name
+    if ($tag -cnotmatch '\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z' -or $release.draft -or $release.prerelease) {
+        throw 'The official yt-dlp release response did not identify a valid stable release.'
+    }
+    $baseUrl = 'https://github.com/yt-dlp/yt-dlp/releases/download/' + $tag + '/'
+    $temporary = Join-Path $MpvFolder ('yt-dlp-verify-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $temporary -ErrorAction Stop | Out-Null
+    try {
+        $manifest = Join-Path $temporary 'SHA2-256SUMS'
+        $download = Join-Path $temporary 'yt-dlp.exe.download'
+        Invoke-WebRequest -UseBasicParsing -Uri ($baseUrl + 'SHA2-256SUMS') -OutFile $manifest -TimeoutSec 30
+        if ((Get-Item -LiteralPath $manifest).Length -gt 1MB) { throw 'Upstream checksum file is unexpectedly large.' }
+        $expected = Get-YtDlpChecksum ([IO.File]::ReadAllText($manifest))
+        Invoke-WebRequest -UseBasicParsing -Uri ($baseUrl + 'yt-dlp.exe') -OutFile $download -TimeoutSec 180
+        if ((Get-Item -LiteralPath $download).Length -lt 1024) { throw 'Downloaded yt-dlp file is unexpectedly small.' }
+        $actual = (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash
+        if ($actual -ine $expected) { throw 'yt-dlp SHA-256 checksum mismatch. The download was not installed; retry from the official source.' }
+        # Atomic same-volume move; unlike a force-copy it refuses to overwrite
+        # a destination created by another process while we were downloading.
+        [IO.File]::Move($download, $destination)
+        Write-Host "Verified yt-dlp $tag (SHA-256 matched the upstream release)." -ForegroundColor Green
+    } finally {
+        # Only this invocation's uniquely named staging directory is removed.
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force }
+    }
+}
+
 # Tests import only the functions above. No Windows calls, files or downloads.
 if ($FunctionsOnly) { return }
 
@@ -213,7 +325,7 @@ try {
     }
     $sid = New-Object Security.Principal.SecurityIdentifier($TaskUserSid)
     $taskUser = $sid.Translate([Security.Principal.NTAccount]).Value
-    Write-Host "`nMPV Radio Automation - guided setup (revision 6)" -ForegroundColor Cyan
+    Write-Host "`nMPV Radio Automation - guided setup (revision 7)" -ForegroundColor Cyan
     Write-Host 'Type only your answer, then press Enter. Do not type the prompt or [brackets].'
     Write-Host 'Press Enter to accept a displayed default. Type Q at any input prompt to cancel.'
     Write-Host ("Computer time now: " + (Get-Date).ToString('yyyy-MM-dd HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture))
@@ -225,6 +337,15 @@ try {
             throw "Missing $InstallDir\$exe. Install MPV yourself first, then rerun INSTALL.cmd."
         }
     }
+    $stage = 'checking the YouTube JavaScript runtime'
+    $runtimeSearchPath = $env:PATH
+    if ($identity.User.Value -ne $TaskUserSid) {
+        # A different UAC administrator's PATH is not the listener's PATH.
+        $runtimeSearchPath = ''
+        Write-Host 'Setup is elevated as a different account; checking portable Deno in C:\MPV, not the administrator''s PATH.'
+    }
+    $youtubeRuntime = Get-YouTubeRuntime -MpvFolder $InstallDir -SearchPath $runtimeSearchPath
+    Write-Host ("YouTube runtime: Deno $($youtubeRuntime.Version) at $($youtubeRuntime.Path)") -ForegroundColor Green
     $payloadFiles = @('Radio-Hidden.cs','Build-HiddenStarter.ps1','Radio.ps1','Play-YouTube.ps1','Check-Radio.ps1','Check Radio.cmd','Stop Radio.cmd','portable_config\script-opts\random-start.conf','portable_config\scripts\random-start.lua','Play YouTube on MPV Audio.cmd','Play YouTube Video - 720p Best Audio Always On Top.cmd','Update yt-dlp.cmd','README-LOCAL.txt')
     foreach ($relative in $payloadFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $PayloadDir $relative) -PathType Leaf)) {
@@ -295,7 +416,7 @@ try {
     Write-Host 'Wake request ON; catch-up after a missed start OFF; retry 5 minutes x 3; ignore duplicate task starts.'
     Write-Host 'A start time already passed today waits for the next selected day. Use Run in Task Scheduler to test now.'
     Write-Host 'Existing configuration and matching tasks will be backed up. Histories are not replaced.'
-    if (-not (Test-Path -LiteralPath "$InstallDir\yt-dlp.exe")) { Write-Host 'yt-dlp.exe is missing; approval also allows downloading it from the official GitHub release.' }
+    if (-not (Test-Path -LiteralPath "$InstallDir\yt-dlp.exe")) { Write-Host 'yt-dlp.exe is missing; approval allows downloading it and its SHA-256 checksum from the same official GitHub release.' }
     $approved = Read-Validated 'Apply the settings shown above? Type YES to save, or NO to cancel' 'NO' {
         param($v)
         if ($v -in @('Y','YES')) { return $true }
@@ -332,16 +453,8 @@ try {
     $stage = 'building the hidden-start helper'
     $builtStarter = Join-Path $backup 'Radio-Hidden.new.exe'
     & (Join-Path $PayloadDir 'Build-HiddenStarter.ps1') -OutputPath $builtStarter
-    $stage = 'downloading yt-dlp if missing'
-    if (-not (Test-Path -LiteralPath "$InstallDir\yt-dlp.exe")) {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-        $download = Join-Path $InstallDir ('yt-dlp-' + [guid]::NewGuid().ToString('N') + '.download')
-        try {
-            Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile $download -TimeoutSec 180
-            if ((Get-Item -LiteralPath $download).Length -lt 1024) { throw 'Downloaded yt-dlp file is unexpectedly small.' }
-            Move-Item -LiteralPath $download -Destination "$InstallDir\yt-dlp.exe"
-        } finally { if (Test-Path -LiteralPath $download) { Remove-Item -LiteralPath $download -Force } }
-    }
+    $stage = 'downloading and verifying yt-dlp if missing'
+    Install-VerifiedYtDlp $InstallDir
     $stage = 'copying project files and writing the selected audio device'
     foreach ($relative in $payloadFiles) {
         $destination = Join-Path $InstallDir $relative

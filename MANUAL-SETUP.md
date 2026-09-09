@@ -12,7 +12,11 @@ Start at [mpv's installation page](https://mpv.io/installation/) and follow its 
 
 Extract the **complete player archive** to `C:\MPV`, not just the executable. Do not run it inside WinRAR. No file-association registration is required for this project.
 
-Get `yt-dlp.exe` from the [official yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases/latest) and put it beside `mpv.exe`. Use the appropriate x64 executable. It is a command-line helper; double-clicking it without a URL is not an installation test. Follow [upstream JavaScript-runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS) as required for YouTube; the runtime is a separate dependency, not bundled here.
+Get `yt-dlp.exe` from the [official yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases/latest) and put it beside `mpv.exe`. Use the appropriate x64 executable. It is a command-line helper; double-clicking it without a URL is not an installation test.
+
+Download `SHA2-256SUMS` from that **same release**. In PowerShell run `Get-FileHash -LiteralPath 'C:\MPV\yt-dlp.exe' -Algorithm SHA256` and compare the displayed hash with the entry named exactly `yt-dlp.exe`. They must match (hexadecimal letter case does not matter). Do not run a download whose checksum is missing or mismatched. The guided installer performs this comparison automatically only when downloading a missing yt-dlp; manual setup does not run that installer check. A checksum match is an integrity check against the published list, not a malware scan or signature verification.
+
+For this project's default YouTube setup, use **stable Deno 2.3.0 or newer**: download `deno-x86_64-pc-windows-msvc.zip` from the [official Deno releases](https://github.com/denoland/deno/releases/latest), extract it, and put `deno.exe` directly in `C:\MPV`. Do not select `denort`. Verify with `C:\MPV\deno.exe --version`. Follow [upstream JavaScript-runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS); Deno is separate and is not downloaded by our installer. The portable location avoids different-user PATH issues. Custom alternative runtimes require their own yt-dlp configuration and are not validated by our guided setup. Keep security protection enabled.
 
 Minimum layout:
 
@@ -21,6 +25,7 @@ C:\MPV\
     mpv.exe
     mpv.com
     yt-dlp.exe
+    deno.exe
     Radio.ps1
     Radio-Hidden.cs
     Build-HiddenStarter.ps1
