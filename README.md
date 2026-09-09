@@ -2,7 +2,7 @@
 
 A small Windows toolkit that turns MPV + yt-dlp into an automated YouTube background-music / radio system.
 
-Looking for music to try? See the [optional Morning Music and Day Finisher playlists](EXAMPLE-PLAYLISTS.md). They are not selected automatically; users still choose their own playlist URLs. That page also explains how to switch an existing scheduled task to either playlist without reinstalling.
+The guided installer now offers the [Morning Music and Day Finisher sample playlists](EXAMPLE-PLAYLISTS.md) directly: type **S** to use the sample shown for that task, paste a different URL, or press **Enter** to skip. Prefer doing everything yourself? The [manual setup guide](MANUAL-SETUP.md) includes the complete Lua code and exact Task Scheduler fields.
 
 ## What it does
 
@@ -26,11 +26,11 @@ Windows 10/11 x64, Windows PowerShell 5.1, internet access, and MPV installed ma
 2. Extract the **whole MPV archive** into `C:\MPV`. Verify `C:\MPV\mpv.exe` and `C:\MPV\mpv.com` exist.
 3. On this repository choose **Code -> Download ZIP**. Extract the whole project ZIP into a separate folder. Keep `Install.ps1`, `INSTALL.cmd` and the `payload` folder together.
 4. Double-click `INSTALL.cmd` in that extracted project folder. Do not run it from inside the ZIP. Start it as the Windows user who will listen; setup will request elevation and carry that user's identity forward.
-5. Select an audio output by **number**. Then supply playlists, start times, days and maximum runtimes using the examples below.
+5. Select an audio output by **number**. For each task, type **S** to use its displayed sample playlist, paste your own URL, or press Enter to skip. Then choose the start time, days and maximum runtime.
 6. Review the summary, including speaker name, Windows account, times and approximate stops. Type **YES** to apply. Nothing is saved merely by answering the input questions.
 7. In Task Scheduler, right-click a configured music task and choose **Run** to test it.
 
-The updated installer identifies itself as **guided setup (revision 2)**. It re-prompts on invalid input instead of crashing later. MPV is never installed or replaced by this helper.
+The updated installer identifies itself as **guided setup (revision 3)**. It re-prompts on invalid input instead of crashing later. MPV is never installed or replaced by this helper.
 
 ## Exactly what to type at each prompt
 
@@ -55,9 +55,22 @@ No GUID needs copying. For compatibility, the revised installer also accepts a c
 
 Both tasks ask the same four questions. The task name does not restrict the chosen clock time; you can use an evening test time for the Morning task.
 
+The Morning task now shows:
+
+```text
+--- Music - Morning ---
+Sample playlist: https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
+Type S to use this sample, or paste your own full YouTube playlist link.
+YouTube playlist (S = sample, URL = your own, Enter = skip):
+```
+
+Type **S** and press Enter to use Morning Music. At the Day Finisher prompt, **S** uses `https://www.youtube.com/playlist?list=PLBejJIaDgbyQ` instead. Lowercase `s` and `sample` also work. A blank answer still skips the task; it never silently selects a sample.
+
 | Prompt | What to enter | Meaning / default |
 | --- | --- | --- |
-| YouTube playlist URL | Paste the complete link from your browser, without extra text | Must contain `list=`. Enter on an empty line skips this task and all its later questions. |
+| YouTube playlist | `S` | Use the sample displayed for this particular task. |
+| YouTube playlist | Paste a complete YouTube link | Use your own playlist; the URL must contain `list=`. No command-line options needed. |
+| YouTube playlist | Press Enter without typing | Skip this task and all its later questions. Any existing task remains unchanged. |
 | Start time | `06:45`, `0645`, or `6:45 AM` | All mean 6:45 in the morning. Morning default is `06:45`. |
 | Start time, evening example | `18:35`, `1835`, or `6:35 PM` | All mean 6:35 in the evening. Day-finisher default is `15:45` (3:45 PM). |
 | Days | `1` | Monday-Friday; day-finisher default. |
@@ -70,15 +83,17 @@ Both tasks ask the same four questions. The task name does not restrict the chos
 | Maximum runtime | `45 min` | Forty-five minutes. |
 | Final confirmation | `YES` | Back up and apply the displayed settings. Enter defaults to NO. |
 
-**Start time is a clock time; maximum runtime is a duration, NOT an end time.** For example, a start of `18:35` and runtime of `1.5` means an approximate stop at `20:05` (8:05 PM), assuming an on-time uninterrupted run. The allowed runtime is 1 minute to 24 hours.
+**Maximum runtime is a DURATION, not the time of day to stop.** Start time is the local clock time at which playback begins. For example, a start of `18:35` and runtime of `1.5` means an approximate stop at `20:05` (8:05 PM), assuming an on-time uninterrupted run. The allowed runtime is 1 minute to 24 hours.
 
-This URL is a **format example only**; replace it with your actual playlist:
+The runtime screen says:
 
 ```text
-https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID
+Maximum runtime is a DURATION, not the time of day to stop.
+Examples: 3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.
+Maximum runtime [Enter = 3]:
 ```
 
-Alternatively, use these **optional recommended playlists**. Paste only the appropriate URL at the corresponding task's playlist prompt:
+### Sample URLs, also available for copying
 
 **Morning Music:**
 
@@ -92,9 +107,9 @@ https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
 https://www.youtube.com/playlist?list=PLBejJIaDgbyQ
 ```
 
-Do not add `--shuffle` or other command-line options at the installer prompt; the installer supplies them. These links are not automatic defaults. To change an existing task rather than reinstall, follow [the existing-task instructions](EXAMPLE-PLAYLISTS.md#using-these-links-on-an-already-configured-computer).
+Do not add `--shuffle` or other command-line options at the installer prompt; the installer supplies them. Selecting **S** is optional and is shown in the final review before saving. To change an existing task rather than reinstall, follow [the existing-task instructions](EXAMPLE-PLAYLISTS.md#using-these-links-on-an-already-configured-computer).
 
-The installer normalizes a YouTube URL containing a playlist ID to its playlist URL, removing `si=`, `t=`, and other share/watch parameters. URL-format validation is not a check that the playlist exists or is playable. No playlists are preselected by the installer.
+The installer normalizes a YouTube URL containing a playlist ID to its playlist URL, removing `si=`, `t=`, and other share/watch parameters. URL-format validation is not a check that the playlist exists or is playable.
 
 Leaving a task's playlist blank **does not delete or disable an existing task** with that name. It leaves that task unchanged. To stop an old task, use Task Scheduler to disable it.
 
@@ -104,9 +119,9 @@ All times use the computer's local clock. If today's selected start time has alr
 
 Close the old failed installer before retrying. Download the current repository ZIP and extract it again. Alternatively, replace only `Install.ps1` in your previously extracted project folder with the updated file; keep it beside the original `INSTALL.cmd` and `payload` folder. Do not put the setup helper in `C:\MPV` unless the matching payload is there too.
 
-An earlier failed installer may already have written an incomplete audio ID into `mpv.conf`. Revision 2 ignores that config while listing devices, then writes the correctly selected ID when you approve.
+An earlier failed installer may already have written an incomplete audio ID into `mpv.conf`. The current guided setup ignores that config while listing devices, then writes the correctly selected ID when you approve.
 
-Before replacing files, revision 2 makes a timestamped backup in:
+Before replacing files, guided setup makes a timestamped backup in:
 
 ```text
 C:\MPV\setup-backups\YYYYMMDD-HHMMSS-fff\
@@ -193,3 +208,11 @@ For scheduler problems, verify the correct user is logged in, the selected speak
 ## Third-party software and disclaimer
 
 MPV and yt-dlp remain separate upstream projects and are not bundled here. See `THIRD_PARTY.md`. This project does not provide or redistribute music/video content. Users are responsible for permissions, licenses and service terms applicable to their listening or public playback.
+
+## Alternative: set everything up manually (no installer)
+
+**[Open the complete manual setup guide](MANUAL-SETUP.md).** This is a separate installation method, not an extra step after running the installer.
+
+The guide walks through installing MPV and yt-dlp yourself, creating the same `C:\MPV` folders, finding your speaker's full device ID, saving `mpv.conf`, and pasting the **complete current `random-start.lua` code**. It includes both sample playlist links, the two exact Task Scheduler actions, separate Morning and Day Finisher schedules, runtime examples, optional clipboard launchers, testing, backups and troubleshooting.
+
+You can follow it without running `INSTALL.cmd` or `Install.ps1`. On a computer already configured by the installer, edit the existing tasks instead of creating duplicates.
