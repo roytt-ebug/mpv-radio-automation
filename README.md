@@ -9,12 +9,12 @@ Looking for music to try? See the [optional Day Finisher playlist recommendation
 - Plays a shuffled YouTube playlist on a schedule, using a selected audio output.
 - Can request waking a sleeping PC and play while the selected user is logged in but the screen is locked.
 - Stops an older accessible mpv.exe before a scheduled session starts.
-- Remembers recently played tracks across sessions.
+- Remembers the last 10 accepted track starts across sessions, including short tracks, with timestamps and titles.
 - Tracks under 20 minutes are not randomly seeked; tracks 20 minutes or longer get a random 0%-75% starting point.
 - Remembers the last 10 random-start percentages and avoids exact recent repeats.
 - Includes clipboard launchers for audio-only playback and an always-on-top, resizable video window with video limited to 720p and best available audio.
 
-**Status:** early test build. Windows installer-input tests are provided in `tests/Test-InstallerInput.ps1`. Passing them does not establish that a particular speaker, YouTube playlist or sleep/wake setup works. Always test playback on your computer.
+**Status:** early test build. Windows installer-input tests are provided in `tests/Test-InstallerInput.ps1`. Lua history tests with mocked MPV events are in `tests/test-radio-history.lua`. Passing them does not establish that a particular speaker, YouTube playlist or sleep/wake setup works. Always test playback on your computer.
 
 ## Requirements
 
@@ -123,7 +123,13 @@ ytdl-format=bestaudio/best
 force-window=yes
 ```
 
-The script at `C:\MPV\portable_config\scripts\random-start.lua` keeps persistent recent-track history (up to five tracks, reduced for small playlists), leaves tracks under 20 minutes unseeked, and chooses a 0%-75% random start for longer tracks. It avoids the last ten exact random percentages and tries to stay at least six percentage points from the previous percentage. This is a recent-track filter plus MPV shuffle, not yet a complete persistent shuffle-bag implementation.
+The script at `C:\MPV\portable_config\scripts\random-start.lua` retains the last **10 accepted track starts**, independently of playlist size. It leaves tracks under 20 minutes unseeked and chooses a 0%-75% random start for longer tracks. The separate percentage history avoids the last ten exact random percentages and tries to stay at least six percentage points from the previous percentage.
+
+### Track history is not a ten-song blacklist
+
+History records what started playing. Repeat protection considers up to the most recent five starts, and shrinks for small playlists according to the number of unique video IDs. With four distinct tracks it protects the last two rather than blocking three and forcing a fixed cycle. With two tracks it can alternate; with one it allows repeats. Duplicate playlist rows do not count as extra choices. History still retains ten starts in all of those cases.
+
+This remains a recent-track filter plus MPV shuffle, not a complete persistent shuffle-bag implementation. Entries skipped automatically by the repeat filter are not counted as played. An accepted track is recorded when loaded, even if you later stop or manually skip it; this is not a completed-listen or audible-listening-duration log. Manual launchers with `--load-scripts=no` do not participate in this history.
 
 History files:
 
@@ -132,7 +138,21 @@ C:\MPV\portable_config\random-start-history.txt
 C:\MPV\portable_config\recent-track-history.txt
 ```
 
-The revised installer does not redesign that Lua algorithm or its history format.
+New track-history rows use this format:
+
+```text
+YYYY-MM-DD HH:MM:SS|youtube:VIDEO_ID|Track title
+```
+
+The oldest retained row is at the top; the newest is at the bottom. Short songs and long mixes both count. The file builds up to ten rows as tracks start, then drops the oldest row on each new start. It is local to this PC and shared by its morning/evening radio sessions, not synchronized with GitHub or another PC.
+
+Old two-column rows are loaded automatically. Existing timestamps are preserved as stored, and new timestamps are captured once per start rather than being replaced whenever the file is rewritten. The update cannot reconstruct titles/times or entries discarded by an earlier version. Title columns for old rows may remain blank. Keep only one active radio Lua script and avoid multiple simultaneous players writing the same files.
+
+To retain more than ten starts, increase `TRACK_HISTORY_SIZE` in the script; this does not enlarge the repeat-blocking window. The default remains ten.
+
+### Update only the radio script on a working computer
+
+Close MPV. Back up the old Lua file outside `portable_config\scripts` (or use a non-`.lua` backup extension). Copy the new repository file `payload\portable_config\scripts\random-start.lua` over `C:\MPV\portable_config\scripts\random-start.lua`, keeping that exact filename, then restart playback. Do not keep two active `.lua` versions. Keep both history files; migration is automatic. No installer rerun or Task Scheduler changes are needed for this script-only upgrade.
 
 ## Manual launchers
 
