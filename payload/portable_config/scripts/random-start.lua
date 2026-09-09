@@ -9,7 +9,9 @@
 --   * The last 10 accepted track starts are saved across restarts.
 --   * Retention is separate from repeat protection, so small playlists still play.
 --   * Tracks shorter than 20 minutes are not randomly seeked.
---   * Tracks 20 minutes or longer start at a random point from 0% to 75%.
+--   * Tracks 20+ minutes favor less-recently-heard sections within 0%-75%.
+--   * Estimated played intervals checkpoint every 15 seconds.
+--   * Optional 20-40 minute section sampling with fade-out is OFF by default.
 --   * The last 10 random-start percentages are remembered across MPV restarts.
 --   * Exact recent percentages are not reused, and the new percentage
 --     tries to stay at least 6 percentage points away from the previous one.
@@ -79,42 +81,6 @@ local function read_percent_history()
     end
 
     return history
-end
-
-local function percent_is_recent(percent, history)
-    for _, item in ipairs(history) do
-        if item.percent == percent then
-            return true
-        end
-    end
-    return false
-end
-
-local function choose_percent(history)
-    local last =
-        history[#history] and
-        history[#history].percent or
-        nil
-
-    for _ = 1, 500 do
-        local candidate = math.random(0, MAX_START_PERCENT)
-        local far_enough =
-            (not last) or
-            (math.abs(candidate - last) >= MIN_PERCENT_GAP_FROM_LAST)
-
-        if not percent_is_recent(candidate, history) and far_enough then
-            return candidate
-        end
-    end
-
-    for _ = 1, 500 do
-        local candidate = math.random(0, MAX_START_PERCENT)
-        if not percent_is_recent(candidate, history) then
-            return candidate
-        end
-    end
-
-    return math.random(0, MAX_START_PERCENT)
 end
 
 local function save_percent_history(history, percent)
@@ -260,12 +226,279 @@ local function remember_track(key, title)
     save_persistent_track_history()
 end
 
+-- =========================
+-- PER-RECORDING HEARD SECTIONS
+-- =========================
+-- These are estimated played intervals, not proof that a person heard sound.
+-- One active player must own these files. No buffered/downloaded span is counted.
+local options = {
+    section_mode = false,
+    section_min_minutes = 20,
+    section_max_minutes = 40,
+    fade_seconds = 5,
+    preference_window_minutes = 20,
+    recency_half_life_days = 14,
+    history_max_age_days = 180,
+    history_max_intervals = 2000,
+    history_per_recording = 40,
+    checkpoint_seconds = 15
+}
+require("mp.options").read_options(options, "random-start")
+local function finite(n)
+    return type(n) == "number" and n == n and n > -math.huge and n < math.huge
+end
+local function checked_option(name, default, minimum, maximum)
+    local value = options[name]
+    if not finite(value) or value < minimum or value > maximum then
+        mp.msg.warn("Invalid " .. name .. "; using " .. tostring(default))
+        options[name] = default
+    end
+end
+checked_option("section_min_minutes", 20, 0.01, 1440)
+checked_option("section_max_minutes", 40, 0.01, 1440)
+checked_option("fade_seconds", 5, 0, 60)
+checked_option("preference_window_minutes", 20, 0.01, 1440)
+checked_option("recency_half_life_days", 14, 0.01, 3650)
+checked_option("history_max_age_days", 180, 1, 3650)
+checked_option("history_max_intervals", 2000, 10, 10000)
+checked_option("history_per_recording", 40, 1, 200)
+checked_option("checkpoint_seconds", 15, 1, 300)
+if options.section_min_minutes > options.section_max_minutes then
+    mp.msg.warn("Section minimum exceeds maximum; using 20-40 minutes.")
+    options.section_min_minutes, options.section_max_minutes = 20, 40
+end
+local SECTION_FILE = "C:\\MPV\\portable_config\\heard-sections.txt"
+local SECTION_HEADER = "# MPV heard-sections v1"
+local heard, dirty = {}, false
+local active_long
+local last_checkpoint = mp.get_time()
+local function clock(seconds)
+    seconds = math.max(0, math.floor(seconds))
+    return string.format("%d:%02d", math.floor(seconds / 60), seconds % 60)
+end
+local function prune_heard()
+    -- Retain the newest intervals per recording and globally. Never keep unbounded state.
+    local result, counts = {}, {}
+    local oldest = os.time() - options.history_max_age_days * 86400
+    for i = #heard, 1, -1 do
+        local item = heard[i]
+        local count = counts[item.key] or 0
+        if item.heard_at >= oldest and count < options.history_per_recording
+            and #result < options.history_max_intervals then
+            table.insert(result, 1, item)
+            counts[item.key] = count + 1
+        end
+    end
+    heard = result
+end
+local function read_sections(path)
+    local file = io.open(path, "r")
+    if not file then return nil end
+    local result, valid_header = {}, false
+    for line in file:lines() do
+        if line == SECTION_HEADER then valid_header = true end
+        local stamp, key, first, last, epoch, duration, title = line:match(
+            "^([^|]+)|([^|]+)|([^|]+)|([^|]+)|([^|]+)|([^|]+)|([^|]*)|[^|]*$")
+        first, last, epoch, duration = tonumber(first), tonumber(last), tonumber(epoch), tonumber(duration)
+        if stamp and key and finite(first) and finite(last) and finite(epoch) and finite(duration)
+            and first >= 0 and last > first and last <= duration + 1 and duration > 0
+            and epoch > 0 and epoch <= os.time() + 86400 then
+            result[#result + 1] = {timestamp=stamp, key=key, first=first, last=last,
+                heard_at=epoch, duration=duration, title=title}
+        end
+    end
+    file:close()
+    if valid_header then return result end
+    return nil
+end
+heard = read_sections(SECTION_FILE) or read_sections(SECTION_FILE .. ".bak") or {}
+prune_heard()
+local function save_sections()
+    if not dirty then return end
+    prune_heard()
+    local temporary, backup = SECTION_FILE .. ".tmp", SECTION_FILE .. ".bak"
+    local file, err = io.open(temporary, "w")
+    if not file then mp.msg.warn("Cannot checkpoint heard sections: " .. tostring(err)); return end
+    local ok = file:write(SECTION_HEADER, "\n# Last-heard-local|recording-ID|from-seconds|to-seconds|epoch|duration-seconds|title|range\n")
+    for _, item in ipairs(heard) do
+        if not ok then break end
+        ok = file:write(string.format("%s|%s|%.3f|%.3f|%.0f|%.3f|%s|%s-%s\n",
+            history_field(item.timestamp), history_field(item.key), item.first, item.last,
+            item.heard_at, item.duration, history_field(item.title), clock(item.first), clock(item.last)))
+    end
+    local closed = file:close()
+    if not ok or not closed then
+        os.remove(temporary)
+        mp.msg.warn("Heard-section checkpoint incomplete; existing history kept.")
+        return
+    end
+    -- Windows rename cannot replace an existing file. Rotate the last complete
+    -- copy first. A process killed between renames can recover from .bak.
+    local previous = io.open(SECTION_FILE, "r")
+    if previous then
+        previous:close()
+        os.remove(backup)
+        local moved = os.rename(SECTION_FILE, backup)
+        if not moved then os.remove(temporary); mp.msg.warn("Cannot rotate section history."); return end
+    end
+    local replaced = os.rename(temporary, SECTION_FILE)
+    if not replaced then
+        os.rename(backup, SECTION_FILE)
+        mp.msg.warn("Cannot replace section history; previous copy retained.")
+        return
+    end
+    dirty = false
+    last_checkpoint = mp.get_time()
+end
+local function eligible_percentages(history)
+    local recent, candidates = {}, {}
+    for _, item in ipairs(history) do recent[item.percent] = true end
+    local last = history[#history] and history[#history].percent
+    for p = 0, MAX_START_PERCENT do
+        if not recent[p] and (not last or math.abs(p - last) >= MIN_PERCENT_GAP_FROM_LAST) then
+            candidates[#candidates + 1] = p
+        end
+    end
+    if #candidates == 0 then
+        for p = 0, MAX_START_PERCENT do if not recent[p] then candidates[#candidates+1] = p end end
+    end
+    if #candidates == 0 then for p=0,MAX_START_PERCENT do candidates[#candidates+1]=p end end
+    return candidates
+end
+local function select_section(key, duration, history, planned_seconds)
+    -- Compare equal-sized look-ahead windows so a late start is not favored just
+    -- for having less remaining audio. Every allowed start has this much room.
+    local window = math.min(planned_seconds or options.preference_window_minutes * 60,
+        duration * (1 - MAX_START_PERCENT / 100))
+    local candidates, best, winners = eligible_percentages(history), math.huge, {}
+    local now = os.time()
+    for _, p in ipairs(candidates) do
+        local first, score = duration * p / 100, 0
+        for _, item in ipairs(heard) do
+            -- A substantially edited/replaced timeline must not reuse old offsets.
+            if item.key == key and math.abs(item.duration - duration) <= math.max(5, duration * 0.01) then
+                local overlap = math.max(0, math.min(first + window, item.last) - math.max(first, item.first))
+                local age = math.max(0, now - item.heard_at)
+                if age <= options.history_max_age_days * 86400 then
+                    score = score + overlap / window * 2 ^ (-age / (options.recency_half_life_days * 86400))
+                end
+            end
+        end
+        if score < best - 0.000001 then best, winners = score, {p}
+        elseif math.abs(score - best) <= 0.000001 then winners[#winners+1] = p end
+    end
+    return winners[math.random(1, #winners)], best
+end
+local function restore_fade(c)
+    if not c or not c.fade then return end
+    local current = mp.get_property_number("volume", 100)
+    -- Do not overwrite a user's volume adjustment made while fading.
+    if math.abs(current - c.fade.last) < 0.05 then
+        mp.set_property_number("volume", c.fade.base)
+    end
+    c.fade = nil
+end
+local function break_interval()
+    if active_long then active_long.previous, active_long.open = nil, nil end
+end
+local function finish_long()
+    restore_fade(active_long)
+    active_long = nil
+    save_sections()
+end
+local function begin_long(key, title, duration, start, planned_seconds)
+    local speed = mp.get_property_number("speed", 1)
+    if not finite(speed) or speed <= 0 then speed = 1 end
+    active_long = {key=key, title=title, duration=duration, elapsed=0,
+        limit=planned_seconds and math.min(planned_seconds, math.max(0, duration-start)/speed) or nil}
+end
+local function record_interval(c, first, last)
+    if not c.key or last <= first then return end
+    local item = c.open
+    if not item or math.abs(item.last - first) > 0.75 then
+        item = {key=c.key, title=c.title, duration=c.duration, first=first, last=last}
+        heard[#heard+1] = item
+        c.open = item
+    end
+    item.last = math.min(last, c.duration)
+    item.heard_at = os.time()
+    item.timestamp = os.date("%Y-%m-%d %H:%M:%S", item.heard_at)
+    dirty = true
+end
+local function advance_section(c)
+    if active_long ~= c then return end
+    -- Persist before asking MPV to unload; do not leave the next song at zero volume.
+    finish_long()
+    mp.osd_message("Section finished - next mix", 2)
+    local list = mp.get_property_native("playlist", {}) or {}
+    local position = mp.get_property_number("playlist-pos", -1)
+    if #list > 0 and position == #list - 1 and mp.get_property("loop-playlist") == "inf" then
+        if mp.get_property_native("shuffle", false) then mp.commandv("playlist-shuffle") end
+        mp.commandv("playlist-play-index", "0")
+    else
+        mp.commandv("playlist-next", "force")
+    end
+end
+local function tick_sections()
+    local c = active_long
+    if not c then return end
+    local now = mp.get_time()
+    local pos = mp.get_property_number("time-pos")
+    local speed = mp.get_property_number("speed", 1)
+    local volume = mp.get_property_number("volume", 100)
+    local paused = mp.get_property_native("pause", false) or mp.get_property_native("paused-for-cache", false)
+    local seeking = mp.get_property_native("seeking", false)
+    local muted = mp.get_property_native("mute", false)
+    if c.fade and math.abs(volume - c.fade.last) >= 0.05 then
+        -- A human volume change wins. Still honor the section limit, without further fades.
+        c.fade, c.no_fade = nil, true
+    end
+    if paused or seeking or muted or volume <= 0 or mp.get_property("aid") == "no"
+        or not finite(pos) or not finite(speed) or speed <= 0 then
+        break_interval()
+    else
+        local previous = c.previous
+        if previous then
+            local dt, delta = now - previous.time, pos - previous.pos
+            -- Refuse to bridge seeks, sleep, large stalls or speed changes.
+            if dt > 0 and dt <= 3 and delta > 0 and delta <= dt * speed + 0.75
+                and math.abs(speed - previous.speed) < 0.001 then
+                record_interval(c, previous.pos, pos)
+                c.elapsed = c.elapsed + delta / speed
+            else c.open = nil end
+        end
+        c.previous = {time=now, pos=pos, speed=speed}
+        if c.limit then
+            local left = c.limit - c.elapsed
+            if left <= 0.05 then advance_section(c); return end
+            local fade_length = math.min(options.fade_seconds, c.limit)
+            if fade_length > 0 and left < fade_length and not c.no_fade then
+                if not c.fade then c.fade = {base=volume, last=volume} end
+                local target = c.fade.base * math.max(0.001, left / fade_length)
+                mp.set_property_number("volume", target)
+                c.fade.last = target
+            end
+        end
+    end
+    if dirty and now - last_checkpoint >= options.checkpoint_seconds then save_sections() end
+end
+mp.add_periodic_timer(0.5, tick_sections)
+mp.register_event("seek", function() restore_fade(active_long); break_interval(); save_sections() end)
+mp.register_event("playback-restart", break_interval)
+for _, property in ipairs({"pause", "paused-for-cache", "mute", "seeking"}) do
+    mp.observe_property(property, "bool", function() break_interval() end)
+end
+mp.register_event("shutdown", finish_long)
+
 load_persistent_track_history()
 
 -- Invalidate delayed seeks/skips when any file ends, starts or is reloaded.
 -- Comparing URL alone is insufficient when the same song is loaded twice.
 local generation = 0
-local function invalidate_callbacks() generation = generation + 1 end
+local function invalidate_callbacks()
+    generation = generation + 1
+    finish_long()
+end
 mp.register_event("start-file", invalidate_callbacks)
 mp.register_event("end-file", invalidate_callbacks)
 
@@ -274,6 +507,7 @@ mp.register_event("end-file", invalidate_callbacks)
 -- =========================
 
 mp.register_event("file-loaded", function()
+    finish_long()
     local path = mp.get_property("path")
     local key = track_key(path)
     local title = mp.get_property("media-title") or "track"
@@ -324,36 +558,30 @@ mp.register_event("file-loaded", function()
             return
         end
 
-        -- Long tracks get a random 0%-75% starting point.
+        if mp.get_property_native("seekable", true) == false then
+            mp.msg.info("Stream is not seekable; section selection and sampling disabled.")
+            return
+        end
+        local planned
+        if options.section_mode then
+            planned = math.random(math.max(1, math.floor(options.section_min_minutes * 60)),
+                math.max(1, math.floor(options.section_max_minutes * 60)))
+        end
         local percent_history = read_percent_history()
-        local percent = choose_percent(percent_history)
+        local speed = mp.get_property_number("speed", 1)
+        if not finite(speed) or speed <= 0 then speed = 1 end
+        local percent, exposure = select_section(key, duration, percent_history, planned and planned * speed)
         local start = duration * percent / 100
-
+        local ok, err = mp.commandv("seek", tostring(start), "absolute", "exact")
+        if ok == nil or ok == false then
+            mp.msg.warn("Section seek failed: " .. tostring(err))
+            return
+        end
         save_percent_history(percent_history, percent)
-
-        mp.commandv("seek", tostring(start), "absolute", "exact")
-
-        local mins = math.floor(start / 60)
-        local secs = math.floor(start % 60)
-
-        mp.osd_message(
-            string.format(
-                "Random start: %d%% (%d:%02d)",
-                percent,
-                mins,
-                secs
-            ),
-            3
-        )
-
-        mp.msg.info(
-            string.format(
-                "Radio start: %s at %d%% (%d:%02d)",
-                title,
-                percent,
-                mins,
-                secs
-            )
-        )
+        begin_long(key, title, duration, start, planned)
+        local label = string.format("Fresh-section start: %d%% (%s)", percent, clock(start))
+        if planned then label = label .. " | sample up to " .. clock(active_long.limit) end
+        mp.osd_message(label, 4)
+        mp.msg.info(string.format("%s: %s; weighted recent overlap %.3f", title, label, exposure))
     end)
 end)
