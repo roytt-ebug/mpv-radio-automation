@@ -32,10 +32,18 @@ A 15-minute recording cannot supply a 30-minute sample. Its allowance is capped 
 2. On this repository choose **Code -> Download ZIP**. Extract the whole project to a separate folder. Keep `INSTALL.cmd`, `Install.ps1`, and `payload` together.
 3. Run `INSTALL.cmd` as the Windows user who will listen. Setup requests elevation while carrying that user's identity forward. It does not install or replace MPV.
 4. Select a detected speaker by **number**. At each playlist question, type **S** for the displayed sample, paste your own URL, or press **Enter to skip** that task.
-5. Enter schedules using the examples below, review the summary, and type **YES** to save. Existing matching files/tasks are backed up first; playback histories are retained. Missing yt-dlp is downloaded from upstream only after approval.
+5. Enter schedules using the examples below, review the summary, and type **YES** to save. Existing matching files/tasks are backed up first; playback histories are retained. Missing yt-dlp is downloaded from upstream only after approval and accepted only after its SHA-256 checksum matches that same release.
 6. In Task Scheduler, right-click a configured task and choose **Run**. Check the speaker, playlist, and repeat behavior before waiting for the next scheduled start.
 
-The guided installer is **revision 6**. It builds the small `Radio-Hidden.exe` starter from included source using Windows' existing .NET Framework, then creates one starter action per radio task. No extra download or developer tools are needed. PowerShell still supervises the same single MPV player, without a console window. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
+The guided installer is **revision 7**. It builds the small `Radio-Hidden.exe` starter from included source using Windows' existing .NET Framework, then creates one starter action per radio task. No extra download or developer tools are needed to build the starter. PowerShell still supervises the same single MPV player, without a console window. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
+
+### YouTube prerequisite: Deno
+
+Before running setup, make **stable Deno 2.3.0 or newer** available. The simplest portable setup is to download `deno-x86_64-pc-windows-msvc.zip` from the [official Deno releases](https://github.com/denoland/deno/releases/latest), extract it, and put **`deno.exe` directly in `C:\MPV`**, beside `yt-dlp.exe` (or where setup will install yt-dlp). Do not select `denort`, ARM, Linux, or macOS builds for this Windows x64 setup. Deno is a command-line dependency, not a second player or an added background service. See [yt-dlp's runtime requirements](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+
+Setup checks Deno's actual version before stopping music or replacing project files/tasks. It also accepts Deno on the current account's PATH when setup and the scheduled listener use the same Windows account. If UAC uses a different administrator, use the portable `C:\MPV\deno.exe`; the administrator's PATH is not proof that the listening account can find Deno. After changing PATH, sign out and back in before testing scheduled playback, or use the portable location.
+
+Missing, outdated, blocked, or unresponsive Deno stops setup with instructions. It is **not downloaded automatically**. This preflight targets Deno, the runtime yt-dlp enables by default; it does not enable or validate custom Node/QuickJS configurations, and does not modify existing yt-dlp settings. Finding Deno does not prove that custom settings, YouTube access, or the physical speaker will work: run the configured task as the listener to verify playback. Do not disable security protection if execution is blocked.
 
 ### Exactly what to type
 
@@ -166,7 +174,9 @@ C:\MPV\yt-dlp.exe -U
 
 Use the entire detected `wasapi/{GUID}` device ID. Enable File Explorer's **File name extensions** to avoid `.lua.txt` or `.conf.txt`. Keep script backups outside `scripts` so MPV cannot load them twice.
 
-For YouTube extraction failures, follow [yt-dlp's current JavaScript-runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS). This installer downloads a missing yt-dlp from upstream but does not install the separate JavaScript runtime. Network, upstream or regional restrictions can still prevent playback.
+For YouTube extraction failures, follow [yt-dlp's current JavaScript-runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS). The installer checks for Deno but does not install it. Network, upstream or regional restrictions can still prevent playback.
+
+For a missing yt-dlp, setup resolves one official stable release, downloads its `SHA2-256SUMS` and `yt-dlp.exe`, and compares SHA-256 before installing the executable. A download error, missing/ambiguous/malformed checksum, or mismatch stops setup with no unverified executable accepted. Temporary download files are cleaned up. An existing `yt-dlp.exe` is left unchanged and is not retrospectively verified by this check. The separate `yt-dlp -U` update command is unchanged. This checks integrity against the retrieved upstream list, not a signature or a malware-free guarantee. If GitHub is unavailable or rate-limits the lookup, wait and retry; do not bypass verification.
 
 Tests cover input validation, Windows task definitions, history, seeking, sample transitions, bounded runtime, scoped shutdown and a live Lua acknowledgement. Local media tests do not verify YouTube or a physical speaker. The manual's full Lua block is checked against the shipped script.
 

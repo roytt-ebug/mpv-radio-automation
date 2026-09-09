@@ -12,6 +12,22 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Build-HiddenStar
 The build refuses to overwrite an existing helper. Stop playback and back
 up that executable before rebuilding. Do not bypass security restrictions.
 
+YOUTUBE DEPENDENCY AND DOWNLOAD CHECKS (installer revision 7)
+Use stable Deno 2.3.0 or newer. The simplest setup is deno.exe directly in
+C:\MPV beside yt-dlp.exe. Download deno-x86_64-pc-windows-msvc.zip from:
+https://github.com/denoland/deno/releases/latest
+Extract deno.exe, not denort.exe. Setup checks its version before replacing
+project files/tasks, but does not download Deno. If using a different UAC
+administrator, portable Deno is required; that administrator's PATH is not
+the listener's PATH. Custom Node/QuickJS settings are not checked or changed.
+See https://github.com/yt-dlp/yt-dlp/wiki/EJS for upstream requirements.
+
+When yt-dlp.exe is missing, setup downloads it and SHA2-256SUMS from the
+same official release and compares SHA-256 before accepting the executable.
+Missing, malformed, ambiguous or mismatched checksums stop installation.
+An existing yt-dlp.exe and its separate -U updater are left unchanged.
+This is an integrity check, not a signature check or a malware-free guarantee.
+
 DEFAULTS
 Sampling ON; recordings at least 15 minutes qualify; sample allowance
 10-30 minutes, capped to the source length. Short songs play normally.

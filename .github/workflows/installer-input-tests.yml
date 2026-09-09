@@ -36,6 +36,9 @@ jobs:
       - name: Test inputs, task definitions and manual Lua copy in Windows PowerShell 5.1
         shell: powershell
         run: .\tests\Test-InstallerInput.ps1
+      - name: Test runtime preflight and checksum-verified download with offline fixtures
+        shell: powershell
+        run: .\tests\Test-InstallerDependencies.ps1
       - name: Test launcher syntax and safe URL handling
         shell: powershell
         run: .\tests\Test-RadioLauncher.ps1
