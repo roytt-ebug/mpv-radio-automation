@@ -39,6 +39,9 @@ jobs:
       - name: Test runtime preflight and checksum-verified download with offline fixtures
         shell: powershell
         run: .\tests\Test-InstallerDependencies.ps1
+      - name: Register and remove a disabled task to verify the listener account
+        shell: powershell
+        run: .\tests\Test-TaskRegistration.ps1
       - name: Test launcher syntax and safe URL handling
         shell: powershell
         run: .\tests\Test-RadioLauncher.ps1

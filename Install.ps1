@@ -1,4 +1,4 @@
-# MPV Radio Automation setup helper, guided setup revision 8.
+# MPV Radio Automation setup helper, guided setup revision 9.
 # Requires Windows PowerShell 5.1. MPV must already be installed in C:\MPV.
 # -FunctionsOnly is for offline parser tests; it does not run installation.
 param(
@@ -181,12 +181,16 @@ function Read-MusicSession([string]$Name, [string]$DefaultTime, [string]$Default
 }
 
 function New-MusicTaskDefinition($Session, [string]$UserSid, [string]$MpvFolder) {
+    # Keep the original listener's identity across UAC, but give Task Scheduler
+    # the qualified account name to avoid computer/user name ambiguity.
+    $sid = New-Object Security.Principal.SecurityIdentifier($UserSid)
+    $account = $sid.Translate([Security.Principal.NTAccount]).Value
     $seconds = $Session.Runtime.TotalSeconds.ToString([cultureinfo]::InvariantCulture)
     $arguments = '-Playlist "' + $Session.Playlist + '" -DurationSeconds ' + $seconds
     $play = New-ScheduledTaskAction -Execute (Join-Path $MpvFolder 'Radio-Hidden.exe') -Argument $arguments -WorkingDirectory $MpvFolder
     $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek ([System.DayOfWeek[]]$Session.Days) -At $Session.At
     $settings = New-ScheduledTaskSettingsSet -WakeToRun -ExecutionTimeLimit ($Session.Runtime + (New-TimeSpan -Minutes 1)) -RestartInterval (New-TimeSpan -Minutes 5) -RestartCount 3 -MultipleInstances IgnoreNew
-    $principal = New-ScheduledTaskPrincipal -UserId $UserSid -LogonType Interactive -RunLevel Limited
+    $principal = New-ScheduledTaskPrincipal -UserId $account -LogonType Interactive -RunLevel Limited
     return New-ScheduledTask -Action @($play) -Trigger $trigger -Settings $settings -Principal $principal
 }
 
@@ -348,7 +352,7 @@ try {
     }
     $sid = New-Object Security.Principal.SecurityIdentifier($TaskUserSid)
     $taskUser = $sid.Translate([Security.Principal.NTAccount]).Value
-    Write-Host "`nMPV Radio Automation - guided setup (revision 8)" -ForegroundColor Cyan
+    Write-Host "`nMPV Radio Automation - guided setup (revision 9)" -ForegroundColor Cyan
     Write-Host 'Type only your answer, then press Enter. Do not type the prompt or [brackets].'
     Write-Host 'Press Enter to accept a displayed default. Type Q at any input prompt to cancel.'
     Write-Host ("Computer time now: " + (Get-Date).ToString('yyyy-MM-dd HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture))
