@@ -2,7 +2,7 @@
 
 A small Windows toolkit that turns MPV + yt-dlp into an automated YouTube background-music / radio system.
 
-Looking for music to try? See the [optional Day Finisher playlist recommendation](EXAMPLE-PLAYLISTS.md). It is not selected automatically; users still choose their own playlist URLs.
+Looking for music to try? See the [optional Morning Music and Day Finisher playlists](EXAMPLE-PLAYLISTS.md). They are not selected automatically; users still choose their own playlist URLs. That page also explains how to switch an existing scheduled task to either playlist without reinstalling.
 
 ## What it does
 
@@ -78,7 +78,23 @@ This URL is a **format example only**; replace it with your actual playlist:
 https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID
 ```
 
-The installer normalizes a YouTube URL containing a playlist ID to its playlist URL, removing `si=`, `t=`, and other share/watch parameters. URL-format validation is not a check that the playlist exists or is playable. No personal playlists are included as defaults.
+Alternatively, use these **optional recommended playlists**. Paste only the appropriate URL at the corresponding task's playlist prompt:
+
+**Morning Music:**
+
+```text
+https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
+```
+
+**Day Finisher:**
+
+```text
+https://www.youtube.com/playlist?list=PLBejJIaDgbyQ
+```
+
+Do not add `--shuffle` or other command-line options at the installer prompt; the installer supplies them. These links are not automatic defaults. To change an existing task rather than reinstall, follow [the existing-task instructions](EXAMPLE-PLAYLISTS.md#using-these-links-on-an-already-configured-computer).
+
+The installer normalizes a YouTube URL containing a playlist ID to its playlist URL, removing `si=`, `t=`, and other share/watch parameters. URL-format validation is not a check that the playlist exists or is playable. No playlists are preselected by the installer.
 
 Leaving a task's playlist blank **does not delete or disable an existing task** with that name. It leaves that task unchanged. To stop an old task, use Task Scheduler to disable it.
 
