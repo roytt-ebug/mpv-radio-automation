@@ -1,30 +1,30 @@
 # MPV Radio Automation for Windows
 
-**Turn a Windows desktop into a scheduled background-music player that treats ordinary songs and long mixes differently.**
+**Scheduled YouTube background music, using one MPV player.**
 
-Choose a YouTube playlist, a speaker, and a schedule. Short songs play normally. Long recordings can begin at a less-recently-heard section, using a local record of the portions actually played. Sampling is enabled by default: rotate between 10-30-minute sections of long mixes, with overlapping crossfades between tracks.
-
-This is a lightweight automation layer around **mpv + yt-dlp**, not a streaming service, a broadcast server, or a replacement for either player. MPV is installed separately. No music, account credentials or third-party executables are included.
+Choose a playlist, speaker and schedule. Ordinary songs play normally; long mixes start in a less recently heard section and rotate after a limited listening period. The project adds a small Windows launcher and a Lua script to separately installed **mpv + yt-dlp**.
 
 ## What it does
 
-- Runs morning/day-finisher playlists through Windows Task Scheduler and a selected audio output, leaving the Windows default output unchanged.
-- Shuffles distinct videos, plays through each pass, and uses a small-playlist-safe recent-track filter. Keeps the last **10 accepted track starts**, including short songs, across sessions.
-- Leaves recordings **under 15 minutes** unseeked. For seekable recordings **15 minutes or longer**, chooses a start in the first **0%-75%** while favoring sections played less recently.
-- Records estimated forward-played intervals **per recording**, rather than assuming everything after the starting point was heard.
-- Enables **10-30-minute section sampling** for eligible recordings and **five-second overlapping crossfades** through two controlled MPV players. Normal songs play through their ending, overlapping the next intro.
-- Includes clipboard shortcuts for audio-only playback and resizable, always-on-top video capped at 720p with best available audio. Manual shortcuts bypass radio scripts and histories.
+- Starts morning/day-finisher playlists using Windows Task Scheduler and your selected audio output.
+- Uses MPV's playlist shuffle, with an adaptive recent-track filter that keeps small playlists playable.
+- Retains the last **10 accepted track starts** with their original timestamps and titles.
+- Remembers estimated played sections separately for each long recording and favors less recent overlap.
+- Provides clipboard shortcuts for audio or video capped at 720p. These play normally and bypass radio histories.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| Eligibility cutoff | **15 minutes** | Only recordings at least this long receive smart seeking and sampling. |
-| Sample length | **10-30 minutes** | A new allowance for each eligible recording, capped to its duration. |
-| Crossfade | **5 seconds** | Next track fades in while the current one fades out. |
-| Session duration | **3 hours** | Maximum runtime of the whole scheduled session. |
+| Eligibility cutoff | **15 minutes** | Only seekable recordings at least this long receive smart seeking and sampling. |
+| Sampling | **On** | Rotate between sections of long recordings. |
+| Sample length | **10-30 minutes** | Choose a new allowance per recording, capped to its duration. |
+| Sample fade-out | **5 seconds** | Fade the current sample, then load the next track. Set to zero to disable. |
+| Session duration | **3 hours** | Maximum runtime of the whole session, including loading and pauses. |
 
-A start is chosen early enough to fit the sample. For example, a 15-minute video cannot provide a 30-minute sample: its allowance is capped to 15 minutes. Sampling can be disabled independently of crossfades.
+**Crossfade has been removed.** There is one MPV window, with no second decoder, preloading controller, or shared-history coordination. The existing simple sample fade-out remains; tracks never overlap. YouTube loading can leave a gap.
 
-**Status: test build.** Automated tests cover input parsing, history, selection and playback transitions. Synthetic/headless checks do not establish real speaker behavior, YouTube availability, loudness quality or sleep/wake reliability on your PC. Test those locally before relying on unattended playback.
+A 15-minute recording cannot supply a 30-minute sample. Its allowance is capped at 15 minutes and its start is chosen early enough to fit it. Short songs receive no automatic seek or sampling cutoff.
+
+**Status: test build.** Automated checks use generated local audio and simulated inputs. Test your own YouTube connection, speaker and Windows schedule before relying on unattended playback.
 
 ## Quick start: guided setup
 
@@ -35,7 +35,7 @@ A start is chosen early enough to fit the sample. For example, a 15-minute video
 5. Enter schedules using the examples below, review the summary, and type **YES** to save. Existing matching files/tasks are backed up first; playback histories are retained. Missing yt-dlp is downloaded from upstream only after approval.
 6. In Task Scheduler, right-click a configured task and choose **Run**. Check the speaker, playlist, and repeat behavior before waiting for the next scheduled start.
 
-The guided installer is **revision 4** and now creates a controller action for each radio task. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
+The guided installer is **revision 5** and now creates a single-player launcher action for each radio task. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
 
 ### Exactly what to type
 
@@ -60,75 +60,74 @@ Type only your answer, not the prompt or brackets. Enter accepts a displayed def
 
 The installer validates URL structure, not playlist existence or playback rights. Share/index/time parameters are removed from scheduled playlist URLs. Skipping a task does not disable or remove an existing task; use Task Scheduler for that.
 
-## Listening and transitions
+## Playback and settings
 
-The active settings file is `C:\MPV\portable_config\script-opts\random-start.conf`. The installer now copies it automatically:
+Edit `C:\MPV\portable_config\script-opts\random-start.conf`, then restart MPV:
 
 ```ini
 section_mode=yes
 min_duration_minutes=15
 section_min_minutes=10
 section_max_minutes=30
-crossfade_seconds=5
 fade_seconds=5
 ```
 
-Restart the radio session after edits. `section_mode=no` restores uninterrupted long mixes, still using smart starting points. `crossfade_seconds=0` disables overlap in the controller. `fade_seconds` controls the sequential fade-out only when the Lua script runs on its own.
+`section_mode=no` plays long mixes without a sampling limit, while retaining smart starting points. `fade_seconds=0` disables the sample fade-out. There is no crossfade setting.
 
-The script compares estimated heard intervals separately for each recording. It can remember `Classical mix: 42:37-68:10` and favor a less recently heard section next time. Recent overlap counts more than old overlap. With sampling, candidate starts must leave room for the selected sample; percentage exclusions relax if necessary to fit it. With sampling disabled, starts remain within 0%-75% and scoring looks ahead up to 20 minutes. Section selection favors variety; it cannot guarantee entirely new audio forever.
+MPV supplies [shuffle, seeking, script options, audio routing and playback controls](https://mpv.io/manual/stable/). Lua supplies our history and section-selection rules. `Radio.ps1` only starts/stops one MPV and enforces the whole-session duration. The launcher explicitly loads this Lua script once and disables automatic loading of other scripts for scheduled playback.
 
-`Radio.ps1` starts two MPV players using the same speaker configuration, preloads the next item while paused near the end of the current section, then overlaps their volume ramps. It waits for the incoming player to advance before reducing the outgoing gain. It handles both ordinary track endings and sample endings. The next source can still fail or load too slowly; gaps remain possible. Failed loads are retried with another entry, with a bounded failure limit. Sampling stops at its allowance if the next source is still unavailable.
-
-MPV already provides [playlist shuffle, seeking, script options and audio routing](https://mpv.io/manual/stable/). Its [gapless-audio option](https://mpv.io/manual/stable/#options-gapless-audio) tries to avoid disruption at a file change; it does not overlap two tracks. There is no native playlist-crossfade switch in the current manual. Our controller uses MPV's documented [JSON IPC](https://mpv.io/manual/stable/#json-ipc), with local named pipes on Windows, to supply that overlap. Windows mixes the two outputs in shared mode; exclusive audio mode is disabled for these players.
-
-The controller console accepts **Space** (pause/resume), **N** (next), **+/-** (volume), and **Q** (stop). `Stop Radio.cmd` also stops the session. The session duration is a wall-clock limit, including pauses. A normal session stop closes both owned players; it is not an additional track crossfade.
+Use MPV's normal controls in its window: **Space** pauses, **>** selects the next playlist entry, **9/0** adjusts volume, and **Q** quits. **Stop Radio.cmd** stops this installation's radio. Other MPV windows are left alone. Sampling counts forward, unmuted playback; the whole-session runtime also counts pauses and loading.
 
 ### Verify that MPV is listening
 
-While a radio task is playing, double-click **`C:\MPV\Check Radio.cmd`**. It connects to each actual MPV process, reads the Lua script's status, sends a harmless ping, and waits for the script to acknowledge it. A PASS reports the running version, speaker, sampling state, 15-minute cutoff, 10-30-minute range, and five-second crossfade setting. Merely having a file in `scripts` does not count as a pass.
+Press **F8 in the MPV window** to display the loaded Lua version and settings. During a scheduled radio session, **Check Radio.cmd** additionally connects to that actual MPV through a local Windows named pipe and waits for a fresh Lua acknowledgement. One PASS should show cutoff `15`, sampling enabled and range `10` to `30`. Check the physical speaker by listening. Directly launched MPV instances use F8; they do not necessarily have the launcher's diagnostic pipe.
 
-When using the Lua script directly in a visible MPV window, press **F8**. Its status explicitly says **standalone** and **sequential fade (no overlap)**. To get crossfades, launch through `Radio.ps1`. The controller explicitly loads this script once and disables automatic loading of other scripts in its two managed players. It requires MPV with Lua and `user-data` support (tested from MPV 0.37).
+Use an MPV build with Lua and `user-data` support (tested from 0.37). No Python or extra PowerShell modules are required to play music.
 
-## History, privacy and limits
+## History and selection
 
-All histories stay on this PC under `C:\MPV\portable_config`; they are not uploaded or synchronized.
+Histories stay in `C:\MPV\portable_config` and are never uploaded by this project:
 
-| File | Purpose |
+| File | Contents |
 | --- | --- |
-| `recent-track-history.txt` | Last 10 accepted starts: timestamp, video ID and title. Not proof a song finished. |
-| `random-start-history.txt` | Last 10 selected long-track percentages. |
-| `heard-sections.txt` | Estimated played ranges, recording ID, duration, last-heard time and title; final column is readable `minutes:seconds-minutes:seconds`. |
-| `heard-sections.txt.bak` | Previous complete section checkpoint, used for recovery. |
+| `recent-track-history.txt` | Last 10 accepted starts: original timestamp, video ID and title. |
+| `random-start-history.txt` | Last 10 selected starting percentages. |
+| `heard-sections.txt` | Estimated played intervals per recording, including readable ranges such as `42:37-68:10`. |
+| `heard-sections.txt.bak` | Previous complete section checkpoint for recovery. |
 
-The recent-track exclusion window is separate from history retention: at most five recent starts, reduced using the number of **unique** videos so small/duplicate-filled playlists remain playable. The controller keeps an in-memory shuffled pass; its remaining queue is rebuilt on restart. Ten-track history persists across restarts.
+Repeat blocking is separate from history retention: at most five recent starts, reduced according to the number of unique videos to leave choices in small playlists. MPV shuffles playlist entries; duplicate entries are not removed. The shuffled queue is rebuilt on restart, while history persists.
 
-Section history skips paused, buffering, muted and detected seek gaps, and refuses to bridge long timer gaps such as computer sleep. It estimates **player activity**, not human attention or physical sound output; silent media or a powered-off external speaker cannot be detected reliably. Precision is roughly the polling interval, not sample-accurate audio measurement.
+Smart starts stay within 0%-75% and favor less recently played overlap in that recording. Sampling narrows this range to leave room for the selected allowance; percentage exclusions relax if necessary. With sampling off, scoring looks ahead up to 20 minutes. This is a preference for variety, not a guarantee of never repeating audio.
 
-Section history checkpoints every **15 seconds** by default and at normal file transitions/shutdown. A force-kill can lose the unsaved tail (normally up to a checkpoint interval, potentially longer during blocked execution or write failures). Complete files are rotated through a backup. The controller serializes checkpoints and merges both players' intervals into the shared history. Do not run a separate standalone radio script at the same time; that unmanaged writer is not coordinated.
+Section tracking excludes pauses, buffering, muted playback and detected seeks. It estimates player activity, not whether someone heard the physical speaker. It saves about every 15 seconds and on normal file transitions/shutdown. Abrupt termination or write failures can lose the unsaved portion. History is bounded to 40 intervals per recording, 2,000 overall and 180 days by default; recent overlap has a 14-day half-life. Unknown-duration and nonseekable sources play normally.
 
-By default the section log retains up to **40 intervals per recording**, **2,000 overall**, and **180 days**. Recent overlap uses a **14-day half-life**; these are configurable in the template. Large changes to a recording's duration make old offsets ineligible for selection, rather than assuming an edited timeline still matches. Unknown-duration/non-seekable streams are left to ordinary MPV playback.
+Only one radio script should write these history files at a time. Scheduled launchers coordinate starts for the same installation. Avoid running the script separately alongside the scheduled player; clipboard launchers already disable it.
 
 ## Update an existing working computer
 
-GitHub changes do not update your computer automatically. **Crossfading requires the controller files and a one-time task-action change; replacing Lua alone is insufficient.**
+GitHub changes do not automatically update your PC. This update removes crossfade while keeping sampling and history.
 
-1. Stop the old music tasks and close their MPV players. Back up `C:\MPV\portable_config` outside its `scripts` folder, and export your music tasks.
-2. Download and extract the repository ZIP. Copy the **contents of `payload`** into `C:\MPV`, replacing the included files. The payload contains no `mpv.conf` or playback histories, so your speaker and history files are retained. This does replace `script-opts\random-start.conf` with the new active defaults; retain your backup if you customized other options.
-3. In each existing music task's **Actions**, remove its two old actions and create the single PowerShell action shown in [manual step 7](MANUAL-SETUP.md#7-create-the-morning-task-manually). Keep your triggers and days. Use your own existing duration in `-DurationSeconds` (3 hours = 10800).
-4. Set Task Scheduler's backup stop limit one minute longer than that duration (3 hours + 1 minute for 10800). The controller itself stops at the requested duration; the extra minute is cleanup protection.
-5. Run the task, then open **Check Radio.cmd** and verify both PASS reports. Confirm the physical speaker and listen through a transition.
+1. Stop the music task and close its MPV windows. Back up `portable_config` outside its `scripts` folder and export the music tasks.
+2. Download and extract a fresh repository ZIP. Copy the **contents of `payload` into `C:\MPV`**, replacing included files. Copy all files, including `Play-YouTube.ps1`; do not replace just the Lua script. The payload contains no `mpv.conf` or history files, so your speaker and histories are retained. Its `random-start.conf` supplies the defaults above; keep your backup if you customized settings.
+3. **If your task already runs `Radio.ps1`, keep its action, playlist and duration.** That filename now launches one player. No task recreation is needed.
+4. **If your older task runs taskkill followed by `mpv.exe`,** replace those two actions with the single action in [manual step 7](MANUAL-SETUP.md#7-create-the-morning-task-manually). Preserve your triggers, days and intended duration. Disable duplicate legacy tasks that still kill all MPV windows.
+5. Run a music task. Confirm one MPV window, press F8, and run **Check Radio.cmd**. Listen through a sample transition.
 
-You do not need to reinstall MPV or repeat audio-device setup. Existing tasks that still launch `mpv.exe` directly will sample with the updated Lua, but cannot overlap tracks. Remove/disable old duplicate tasks that could still force-kill all MPV processes.
+The old crossfade version may leave `radio-session.json` behind. The new code does not read it; it can be deleted after stopping playback. No MPV reinstall or speaker reconfiguration is needed for the payload update.
 
-## Scheduler, safeguards and troubleshooting
+## Scheduler and installation safeguards
 
-Each task uses one PowerShell action to run `Radio.ps1` with its playlist and duration. A new radio session asks the previous controller for the same installation to stop, then starts its own players. Unrelated MPV windows are left alone. If the controller is force-killed, a missing-heartbeat watchdog stops its hidden players after 15 seconds; the latest unsaved history can be lost.
+Each task runs one PowerShell launcher action. A new session asks the previous radio launcher for the same installation to stop and waits before opening one MPV. Normal shutdown asks MPV to quit and save history; forced cleanup is restricted to the exact process started by that launcher.
 
-Tasks request wake-to-run, require the selected user to stay logged in (locked is okay), retry failures every five minutes up to three times, reject a duplicate instance of the same task, and stop at the chosen runtime. Missed-start catch-up is off. The speaker must be connected; wake timers/hardware must permit waking. A powered-off PC is not started by Task Scheduler. AC-power conditions are retained; review them on laptops.
+The launcher and Lua independently enforce the requested runtime. If the launcher is forcibly terminated, MPV can remain open until its Lua session limit; close its visible window or use Stop Radio. Task Scheduler's backup stop limit is one minute longer than the intended duration to allow cleanup.
 
-Setup backs up replaced files, matching tasks and shortcuts under `C:\MPV\setup-backups`. It warns about other MPV tasks but leaves them unchanged. Unexpected errors remain visible with a log path in the Windows temporary folder; partial installation has **no automatic rollback**. Keep backups/private logs out of public repositories.
+Tasks require the chosen Windows user to remain logged in; a locked session is okay. Wake-to-run is requested, missed-start catch-up is off, and failures can retry every five minutes up to three times. Duplicate starts of the same task are ignored. Wake timers, power conditions, sleep and the speaker still depend on Windows/hardware; a powered-off PC is not started by these tasks.
 
-Useful commands in Command Prompt:
+Setup validates inputs, shows a review before saving, and backs up replaced configuration, matching tasks and shortcuts under `C:\MPV\setup-backups`. It stops its radio before updating and asks you to close other MPV windows from that installation. Unexpected failures show a stage and error-log path. Partial installation has **no automatic rollback**; use the backup and inspect tasks before retrying. Skipping an existing task leaves it unchanged.
+
+Clipboard shortcuts accept one YouTube URL and pass it directly to MPV without placing pasted text in a Command Prompt command. They stop only this installation's radio before opening manual playback.
+
+## Troubleshooting and checks
 
 ```bat
 C:\MPV\mpv.com --no-config --load-scripts=no --audio-device=help
@@ -136,16 +135,16 @@ C:\MPV\yt-dlp.exe --version
 C:\MPV\yt-dlp.exe -U
 ```
 
-Use the complete detected `wasapi/{GUID}` in `mpv.conf`, not the GUID alone, when configuring manually. Enable File Explorer's **File name extensions**; avoid `mpv.conf.txt`, `random-start.lua.txt` and `random-start.conf.txt`. Keep the default Windows output on your normal headset if the music uses a separate speaker.
+Use the entire detected `wasapi/{GUID}` device ID. Enable File Explorer's **File name extensions** to avoid `.lua.txt` or `.conf.txt`. Keep script backups outside `scripts` so MPV cannot load them twice.
 
-MPV and yt-dlp remain upstream dependencies. For extraction failures follow [yt-dlp's current guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS), including a supported JavaScript runtime when required. This installer does not install that runtime. Upstream/network/region restrictions can still interrupt YouTube playback.
+For YouTube extraction failures, follow [yt-dlp's current JavaScript-runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS). This installer downloads a missing yt-dlp from upstream but does not install the separate JavaScript runtime. Network, upstream or regional restrictions can still prevent playback.
 
-## Development and attribution
+Tests cover input validation, Windows task definitions, history, seeking, sample transitions, bounded runtime, scoped shutdown and a live Lua acknowledgement. Local media tests do not verify YouTube or a physical speaker. The manual's full Lua block is checked against the shipped script.
 
-See the tests and workflows for reproducible checks. Section tests simulate MPV events and file errors; headless smoke tests use generated local media and verify two advancing streams with overlapping gains. They do not test YouTube or a physical speaker. Windows tests validate installer inputs and that the complete Lua code in the manual matches the shipped file.
+GitHub Actions checks run on pull requests and pushes to `main`, not again on every development-branch push. Superseded runs are cancelled. A failed-run email concerns repository tests, not a fault reported by your installed player. Account notification preferences remain under your control in [GitHub notification settings](https://github.com/settings/notifications).
 
-Project automation code uses the MIT license. See `THIRD_PARTY.md` for upstream licenses. Sample playlists are suggestions, not music distributed by the project or permission for public/commercial playback. Do not publish personal authentication files or listening logs.
+Project code uses the MIT license. See [THIRD_PARTY.md](THIRD_PARTY.md) for upstream dependencies. Sample playlists are contributor-approved suggestions; no music, credentials or third-party executables are distributed here.
 
 ## Alternative: set everything up manually (no installer)
 
-**[Open the complete manual setup guide](MANUAL-SETUP.md).** It includes the folder structure, audio device selection, `mpv.conf`, the **entire current Lua script**, active sampling configuration, controller files, sample playlists, the Task Scheduler action and testing steps. Use this instead of the installer, not as an additional installation that creates duplicate tasks.
+**[Open the complete manual setup guide](MANUAL-SETUP.md).** It includes folder layout, speaker selection, `mpv.conf`, the entire current Lua script, sampling settings, launcher files, sample playlists and exact Task Scheduler actions. Follow it instead of the installer to avoid duplicate tasks.

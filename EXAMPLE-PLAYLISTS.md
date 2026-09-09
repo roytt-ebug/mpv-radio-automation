@@ -1,6 +1,6 @@
 # Sample music playlists
 
-These contributor-approved samples are now shown **inside guided setup (revision 4)**. At either task's playlist prompt, type **S** and press Enter to use the sample shown for that task. You may instead paste your own URL, or press Enter without typing to skip. A blank answer never automatically selects music and leaves an existing task unchanged.
+These contributor-approved samples are now shown **inside guided setup (revision 5)**. At either task's playlist prompt, type **S** and press Enter to use the sample shown for that task. You may instead paste your own URL, or press Enter without typing to skip. A blank answer never automatically selects music and leaves an existing task unchanged.
 
 ## Morning Music
 
@@ -32,9 +32,9 @@ The installer suggests **15:45 (3:45 PM), Monday-Friday, for three hours**. Choo
 
 Updating this repository does **not** change tasks already saved on your PC. There is no need to reinstall MPV or replace the Lua script just to change playlists.
 
-1. Open the existing task's **Properties -> Actions** and edit its PowerShell controller action.
+1. Open the existing task's **Properties -> Actions** and edit its PowerShell launcher action.
 2. Change only the URL after `-Playlist`. Keep the `-DurationSeconds` value, triggers, and days.
-3. If the task still has the old taskkill + direct-MPV actions, first follow [the controller upgrade instructions](README.md#update-an-existing-working-computer).
+3. If the task still has the old taskkill + direct-MPV actions, first follow [the launcher upgrade instructions](README.md#update-an-existing-working-computer).
 
 **Morning Music - Add arguments (three hours):**
 

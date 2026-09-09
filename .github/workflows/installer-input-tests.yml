@@ -1,26 +1,28 @@
 name: Installer input tests
 on:
   push:
+    branches: [main]
     paths:
-      - 'Install.ps1'
+      - '*.ps1'
+      - '*.cmd'
       - 'payload/**'
       - 'tests/**'
-      - 'tests/Test-InstallerInput.ps1'
       - 'MANUAL-SETUP.md'
       - 'README.md'
-      - 'payload/portable_config/scripts/random-start.lua'
       - '.github/workflows/installer-input-tests.yml'
   pull_request:
     paths:
-      - 'Install.ps1'
+      - '*.ps1'
+      - '*.cmd'
       - 'payload/**'
       - 'tests/**'
-      - 'tests/Test-InstallerInput.ps1'
       - 'MANUAL-SETUP.md'
       - 'README.md'
-      - 'payload/portable_config/scripts/random-start.lua'
       - '.github/workflows/installer-input-tests.yml'
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -34,9 +36,9 @@ jobs:
       - name: Test inputs, task definitions and manual Lua copy in Windows PowerShell 5.1
         shell: powershell
         run: .\tests\Test-InstallerInput.ps1
-      - name: Test controller on Windows PowerShell 5.1
+      - name: Test launcher syntax and safe URL handling
         shell: powershell
-        run: .\tests\Test-RadioController.ps1
+        run: .\tests\Test-RadioLauncher.ps1
       - name: Download a Windows MPV test runtime (not redistributed)
         shell: powershell
         run: |
@@ -51,6 +53,6 @@ jobs:
           $mpv = Get-ChildItem $folder -Filter mpv.exe -Recurse | Select-Object -First 1
           if (-not $mpv) { throw 'MPV executable missing.' }
           $mpv.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Exercise Windows named pipes and real two-player overlap
+      - name: Exercise one Windows MPV, diagnostics, stop and duration
         shell: powershell
-        run: python tests/test-crossfade-smoke.py
+        run: python tests/test-windows-radio-smoke.py
