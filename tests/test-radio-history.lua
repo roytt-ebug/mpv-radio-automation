@@ -37,17 +37,17 @@ equal(s:count('playlist-play-index'),0,'all duplicates still playable'); equal(#
 s=boot(); list=entries(4); s:accept(list,3,200); s:load(list,3,200)
 equal(s.jump,0,'recent last entry wraps'); equal(#rows(s.files[TRACK]),1,'filtered repeat not logged')
 -- Long tracks preserve the threshold and ten-percentage exclusion window.
-s=boot(); one=entries(1)
+s=boot({section_mode=false}); one=entries(1)
 for i=1,15 do
- s:accept(one,0,1200)
+ s:accept(one,0,900)
  local seen={}
  for _,row in ipairs(rows(s.files[PERCENT])) do
   local p=tonumber(row:match('|(%d+)$'))
   equal(p>=0 and p<=75,true,'percentage range'); equal(seen[p],nil,'no exact recent percentage'); seen[p]=true
  end
 end
-equal(#rows(s.files[PERCENT]),10,'ten selected percentages'); equal(#rows(s.files[TRACK]),10,'ten long starts'); equal(s:count('seek'),15,'20-minute threshold inclusive')
-s:accept(one,0,1199); equal(s:count('seek'),15,'under threshold unchanged')
+equal(#rows(s.files[PERCENT]),10,'ten selected percentages'); equal(#rows(s.files[TRACK]),10,'ten long starts'); equal(s:count('seek'),15,'15-minute threshold inclusive')
+s:accept(one,0,899); equal(s:count('seek'),15,'under threshold unchanged')
 -- Unsafe titles cannot insert records or columns.
 s=boot(); list={{filename=url(1),title='Jazz | Café\nNew line'}}; s:accept(list,0,240)
 equal(#rows(s.files[TRACK]),1,'safe row count'); equal(rows(s.files[TRACK])[1]:match('|[^|]+|(.+)$'),'Jazz   Café New line','safe title')

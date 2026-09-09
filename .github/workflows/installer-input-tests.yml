@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - 'Install.ps1'
+      - 'payload/**'
+      - 'tests/**'
       - 'tests/Test-InstallerInput.ps1'
       - 'MANUAL-SETUP.md'
       - 'README.md'
@@ -11,6 +13,8 @@ on:
   pull_request:
     paths:
       - 'Install.ps1'
+      - 'payload/**'
+      - 'tests/**'
       - 'tests/Test-InstallerInput.ps1'
       - 'MANUAL-SETUP.md'
       - 'README.md'
@@ -22,7 +26,7 @@ permissions:
 jobs:
   windows-input-validation:
     runs-on: windows-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -30,3 +34,23 @@ jobs:
       - name: Test inputs, task definitions and manual Lua copy in Windows PowerShell 5.1
         shell: powershell
         run: .\tests\Test-InstallerInput.ps1
+      - name: Test controller on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\Test-RadioController.ps1
+      - name: Download a Windows MPV test runtime (not redistributed)
+        shell: powershell
+        run: |
+          $release = Invoke-RestMethod 'https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest'
+          $asset = $release.assets | Where-Object { $_.name -match '^mpv-x86_64-[0-9].*\.7z$' } | Select-Object -First 1
+          if (-not $asset) { throw 'No baseline x64 MPV test build found.' }
+          $archive = Join-Path $env:RUNNER_TEMP 'radio-mpv.7z'
+          $folder = Join-Path $env:RUNNER_TEMP 'radio-mpv'
+          Invoke-WebRequest -UseBasicParsing $asset.browser_download_url -OutFile $archive
+          & 7z x $archive "-o$folder" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'MPV extraction failed.' }
+          $mpv = Get-ChildItem $folder -Filter mpv.exe -Recurse | Select-Object -First 1
+          if (-not $mpv) { throw 'MPV executable missing.' }
+          $mpv.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Exercise Windows named pipes and real two-player overlap
+        shell: powershell
+        run: python tests/test-crossfade-smoke.py

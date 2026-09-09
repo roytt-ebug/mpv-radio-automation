@@ -32,7 +32,7 @@ mp.register_event("file-loaded", function()
 end)
 mp.add_timeout(22, function() mp.msg.error("SMOKE FAILED: timed out"); mp.commandv("quit","3") end)
 ''', encoding='utf-8')
-    command = [mpv, '--no-config', '--terminal=yes', '--ao=null', '--vo=null', '--vid=no',
+    command = [mpv, '--config-dir=' + str(work), '--terminal=yes', '--ao=null', '--vo=null', '--vid=no',
         '--volume=100', '--loop-playlist=inf', '--shuffle',
         '--script=' + str(root / 'payload/portable_config/scripts/random-start.lua'),
         '--script=' + str(controller),
@@ -44,7 +44,7 @@ mp.add_timeout(22, function() mp.msg.error("SMOKE FAILED: timed out"); mp.comman
     assert result.returncode == 0, 'MPV smoke test did not exit successfully'
     assert 'SMOKE PASS' in result.stdout, 'MPV did not progress through three loads'
     # Windows paths are literal filenames on Linux; production paths remain unchanged.
-    section_file = work / r'C:\MPV\portable_config\heard-sections.txt'
+    section_file = work / 'heard-sections.txt'
     records = [line for line in section_file.read_text().splitlines() if not line.startswith('#')]
     assert len(records) >= 2, 'Estimated playback from both completed samples was not saved'
     for line in records:

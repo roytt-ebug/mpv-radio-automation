@@ -1,19 +1,9 @@
 name: Radio history and section tests
 on:
   push:
-    paths:
-      - 'payload/portable_config/scripts/random-start.lua'
-      - 'tests/test-radio-history.lua'
-      - 'tests/test-radio-sections.lua'
-      - 'tests/test-mpv-sections-smoke.py'
-      - '.github/workflows/radio-history-tests.yml'
+    paths: ['payload/**', 'tests/**', '.github/workflows/radio-history-tests.yml']
   pull_request:
-    paths:
-      - 'payload/portable_config/scripts/random-start.lua'
-      - 'tests/test-radio-history.lua'
-      - 'tests/test-radio-sections.lua'
-      - 'tests/test-mpv-sections-smoke.py'
-      - '.github/workflows/radio-history-tests.yml'
+    paths: ['payload/**', 'tests/**', '.github/workflows/radio-history-tests.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,3 +27,8 @@ jobs:
           luajit tests/test-radio-sections.lua
       - name: Exercise real MPV using generated local audio and a null output
         run: python3 tests/test-mpv-sections-smoke.py
+      - name: Test controller queue and fade envelopes
+        shell: pwsh
+        run: ./tests/Test-RadioController.ps1
+      - name: Exercise two real players with overlapping local audio
+        run: python3 tests/test-crossfade-smoke.py

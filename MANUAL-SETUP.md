@@ -2,7 +2,7 @@
 
 [Back to README](README.md)
 
-This is an **alternative to running the installer**, not an extra installation step. It creates scheduled background music with dedicated audio routing, ten-track history, smarter starting points for long recordings and optional section sampling.
+This is an **alternative to running the installer**, not an extra installation step. It creates scheduled background music with dedicated audio routing, ten-track history, smarter starting points for long recordings and section sampling and overlapping crossfades.
 
 Already configured? Back up `C:\MPV` and export your existing tasks first. Stop MPV before replacing code. Edit existing tasks rather than creating duplicates. Keep only one active radio script; save backups outside `portable_config\scripts`.
 
@@ -21,13 +21,17 @@ C:\MPV\
     mpv.exe
     mpv.com
     yt-dlp.exe
+    Radio.ps1
+    Check-Radio.ps1
+    Check Radio.cmd
+    Stop Radio.cmd
     ...other files from the MPV build...
     portable_config\
         mpv.conf
         scripts\
             random-start.lua
         script-opts\
-            random-start.conf    (optional sampling settings)
+            random-start.conf    (active sampling settings)
 ```
 
 Create missing folders in File Explorer. Turn on **View -> File name extensions** (on Windows 11: View -> Show -> File name extensions).
@@ -53,13 +57,13 @@ ytdl-format=bestaudio/best
 force-window=yes
 ```
 
-Replace the placeholder with your full detected ID. Use **File -> Save As**, choose **All files**, and save exactly `C:\MPV\portable_config\mpv.conf`, not `mpv.conf.txt`. This makes scheduled music audio-only but retains a visible control window. Space pauses/resumes with the player focused; Q quits.
+Replace the placeholder with your full detected ID. Use **File -> Save As**, choose **All files**, and save exactly `C:\MPV\portable_config\mpv.conf`, not `mpv.conf.txt`. This preserves a control window for standalone MPV playback. The radio controller uses its own console controls and hides its two audio players.
 
 ## 4. Save the radio Lua script
 
 Save the **complete code below** in Notepad as `C:\MPV\portable_config\scripts\random-start.lua`, with **All files** selected. Do not include the Markdown backticks. Alternatively, copy [the source file](payload/portable_config/scripts/random-start.lua) to that location.
 
-Short tracks under 20 minutes are not randomly seeked. Longer seekable recordings favor less-recently-played portions within 0%-75%. Ten accepted starts and ten selected percentages persist. The new section log is separate and starts building after this update; it cannot infer what you heard yesterday from an old starting percentage alone.
+Short tracks under 15 minutes are not randomly seeked. Longer seekable recordings favor less-recently-played portions within 0%-75%. Ten accepted starts and ten selected percentages persist. The new section log is separate and starts building after this update; it cannot infer what you heard yesterday from an old starting percentage alone.
 
 <!-- BEGIN RADIO LUA -->
 ```lua
@@ -73,10 +77,10 @@ Short tracks under 20 minutes are not randomly seeked. Longer seekable recording
 --   * MPV handles playlist shuffle.
 --   * The last 10 accepted track starts are saved across restarts.
 --   * Retention is separate from repeat protection, so small playlists still play.
---   * Tracks shorter than 20 minutes are not randomly seeked.
---   * Tracks 20+ minutes favor less-recently-heard sections within 0%-75%.
+--   * Tracks shorter than 15 minutes are not randomly seeked.
+--   * Tracks 15+ minutes favor less-recently-heard sections within 0%-75%.
 --   * Estimated played intervals checkpoint every 15 seconds.
---   * Optional 20-40 minute section sampling with fade-out is OFF by default.
+--   * 10-30 minute section sampling is ON by default.
 --   * The last 10 random-start percentages are remembered across MPV restarts.
 --   * Exact recent percentages are not reused, and the new percentage
 --     tries to stay at least 6 percentage points away from the previous one.
@@ -93,15 +97,17 @@ math.random()
 -- =========================
 
 local MAX_START_PERCENT = 75
+local CONFIG_DIR = mp.command_native({"expand-path", "~~/"})
+if not CONFIG_DIR:match("[/\\]$") then CONFIG_DIR = CONFIG_DIR .. "/" end
 
 -- Only tracks this long or longer get a random start.
--- 20 minutes = 1200 seconds.
-local MIN_RANDOM_START_DURATION = 20 * 60
+-- 15 minutes = 900 seconds.
+local MIN_RANDOM_START_DURATION = 15 * 60
 
 local PERCENT_HISTORY_SIZE = 10
 local MIN_PERCENT_GAP_FROM_LAST = 6
 local PERCENT_HISTORY_FILE =
-    "C:\\MPV\\portable_config\\random-start-history.txt"
+    CONFIG_DIR .. "random-start-history.txt"
 
 -- History retention is independent of the number of playlist entries.
 -- Increase this value to retain more than 10 track starts.
@@ -113,7 +119,7 @@ local MAX_RECENT_TRACKS = 5
 local PERSIST_TRACK_HISTORY = true
 
 local TRACK_HISTORY_FILE =
-    "C:\\MPV\\portable_config\\recent-track-history.txt"
+    CONFIG_DIR .. "recent-track-history.txt"
 
 -- =========================
 -- PERCENTAGE HISTORY
@@ -297,9 +303,12 @@ end
 -- These are estimated played intervals, not proof that a person heard sound.
 -- One active player must own these files. No buffered/downloaded span is counted.
 local options = {
-    section_mode = false,
-    section_min_minutes = 20,
-    section_max_minutes = 40,
+    section_mode = true,
+    managed = false,
+    min_duration_minutes = 15,
+    crossfade_seconds = 5,
+    section_min_minutes = 10,
+    section_max_minutes = 30,
     fade_seconds = 5,
     preference_window_minutes = 20,
     recency_half_life_days = 14,
@@ -319,9 +328,12 @@ local function checked_option(name, default, minimum, maximum)
         options[name] = default
     end
 end
-checked_option("section_min_minutes", 20, 0.01, 1440)
-checked_option("section_max_minutes", 40, 0.01, 1440)
+checked_option("section_min_minutes", 10, 0.01, 1440)
+checked_option("section_max_minutes", 30, 0.01, 1440)
 checked_option("fade_seconds", 5, 0, 60)
+checked_option("crossfade_seconds", 5, 0, 60)
+checked_option("min_duration_minutes", 15, 0.01, 1440)
+MIN_RANDOM_START_DURATION = options.min_duration_minutes * 60
 checked_option("preference_window_minutes", 20, 0.01, 1440)
 checked_option("recency_half_life_days", 14, 0.01, 3650)
 checked_option("history_max_age_days", 180, 1, 3650)
@@ -329,13 +341,55 @@ checked_option("history_max_intervals", 2000, 10, 10000)
 checked_option("history_per_recording", 40, 1, 200)
 checked_option("checkpoint_seconds", 15, 1, 300)
 if options.section_min_minutes > options.section_max_minutes then
-    mp.msg.warn("Section minimum exceeds maximum; using 20-40 minutes.")
-    options.section_min_minutes, options.section_max_minutes = 20, 40
+    mp.msg.warn("Section minimum exceeds maximum; using 10-30 minutes.")
+    options.section_min_minutes, options.section_max_minutes = 10, 30
 end
-local SECTION_FILE = "C:\\MPV\\portable_config\\heard-sections.txt"
+local SECTION_FILE = CONFIG_DIR .. "heard-sections.txt"
 local SECTION_HEADER = "# MPV heard-sections v1"
 local heard, dirty = {}, false
 local active_long
+local prepared, managed_playing = nil, false
+local managed_pending = {}
+local command_sequence = 0
+local last_controller_seen = mp.get_time()
+local VERSION = "2026.09-radio-crossfade-1"
+local json = require("mp.utils").format_json
+local function publish_status()
+    local pos = mp.get_property_number("time-pos", 0)
+    local duration = mp.get_property_number("duration", 0)
+    local speed = math.max(0.01, mp.get_property_number("speed", 1))
+    local remaining = duration > 0 and math.max(0, (duration - pos) / speed) or -1
+    if active_long and active_long.limit then remaining = math.min(remaining, math.max(0, active_long.limit-active_long.elapsed)) end
+    local status = {
+        version=VERSION, managed=options.managed, ready=prepared ~= nil,
+        playing=managed_playing, sequence=command_sequence,
+        section_mode=options.section_mode, min_duration_minutes=options.min_duration_minutes,
+        section_min_minutes=options.section_min_minutes, section_max_minutes=options.section_max_minutes,
+        fade_seconds=options.fade_seconds, crossfade_seconds=options.crossfade_seconds,
+        checkpoint_seconds=options.checkpoint_seconds, path=mp.get_property("path", ""),
+        title=mp.get_property("media-title", ""), remaining=remaining, position=pos,
+        sample_limit=active_long and active_long.limit or 0,
+        paused=mp.get_property_native("pause", false),
+        buffering=mp.get_property_native("paused-for-cache", false),
+        seeking=mp.get_property_native("seeking", false),
+        eof=mp.get_property_native("eof-reached", false),
+        audio_device=mp.get_property("audio-device", "auto")
+    }
+    mp.set_property("user-data/radio-status", json(status))
+end
+local function show_status()
+    local text = string.format("Radio %s | %s | cutoff %.0f min | samples %s %.0f-%.0f min | %s",
+        VERSION, options.managed and "controller connected" or "standalone script loaded",
+        options.min_duration_minutes, options.section_mode and "ON" or "OFF",
+        options.section_min_minutes, options.section_max_minutes,
+        options.managed and ("crossfade " .. options.crossfade_seconds .. " s") or "sequential fade (no overlap)")
+    mp.msg.info(text)
+    mp.osd_message(text, 8)
+    publish_status()
+end
+mp.add_key_binding("F8", "radio-status", show_status)
+mp.register_script_message("radio-status", show_status)
+show_status()
 local last_checkpoint = mp.get_time()
 local function clock(seconds)
     seconds = math.max(0, math.floor(seconds))
@@ -380,6 +434,24 @@ heard = read_sections(SECTION_FILE) or read_sections(SECTION_FILE .. ".bak") or 
 prune_heard()
 local function save_sections()
     if not dirty then return end
+    if options.managed then
+        local current = read_sections(SECTION_FILE) or read_sections(SECTION_FILE .. ".bak") or {}
+        for _, item in ipairs(managed_pending) do
+            if item.saved then
+                for i = #current, 1, -1 do
+                    local old = current[i]
+                    if old.key == item.key and old.first == item.saved.first
+                        and old.last == item.saved.last and old.heard_at == item.saved.heard_at then
+                        table.remove(current, i)
+                        break
+                    end
+                end
+            end
+            current[#current+1] = item
+        end
+        table.sort(current, function(a,b) return a.heard_at < b.heard_at end)
+        heard = current
+    end
     prune_heard()
     local temporary, backup = SECTION_FILE .. ".tmp", SECTION_FILE .. ".bak"
     local file, err = io.open(temporary, "w")
@@ -412,30 +484,42 @@ local function save_sections()
         mp.msg.warn("Cannot replace section history; previous copy retained.")
         return
     end
+    if options.managed then
+        for _, item in ipairs(managed_pending) do
+            item.saved = {first=tonumber(string.format("%.3f",item.first)),
+                last=tonumber(string.format("%.3f",item.last)), heard_at=item.heard_at}
+        end
+        -- Only the open interval can change again; older entries are now on disk.
+        managed_pending = active_long and active_long.open and {active_long.open} or {}
+    end
     dirty = false
     last_checkpoint = mp.get_time()
 end
-local function eligible_percentages(history)
+local function eligible_percentages(history, maximum)
     local recent, candidates = {}, {}
     for _, item in ipairs(history) do recent[item.percent] = true end
     local last = history[#history] and history[#history].percent
-    for p = 0, MAX_START_PERCENT do
+    for p = 0, maximum do
         if not recent[p] and (not last or math.abs(p - last) >= MIN_PERCENT_GAP_FROM_LAST) then
             candidates[#candidates + 1] = p
         end
     end
     if #candidates == 0 then
-        for p = 0, MAX_START_PERCENT do if not recent[p] then candidates[#candidates+1] = p end end
+        for p = 0, maximum do if not recent[p] then candidates[#candidates+1] = p end end
     end
-    if #candidates == 0 then for p=0,MAX_START_PERCENT do candidates[#candidates+1]=p end end
+    if #candidates == 0 then for p=0,maximum do candidates[#candidates+1]=p end end
     return candidates
 end
 local function select_section(key, duration, history, planned_seconds)
     -- Compare equal-sized look-ahead windows so a late start is not favored just
     -- for having less remaining audio. Every allowed start has this much room.
-    local window = math.min(planned_seconds or options.preference_window_minutes * 60,
-        duration * (1 - MAX_START_PERCENT / 100))
-    local candidates, best, winners = eligible_percentages(history), math.huge, {}
+    local maximum = MAX_START_PERCENT
+    if planned_seconds then
+        maximum = math.min(maximum, math.max(0, math.floor((duration-math.min(planned_seconds,duration))/duration*100 + 0.000001)))
+    end
+    local window = planned_seconds and math.min(planned_seconds,duration) or
+        math.min(options.preference_window_minutes * 60, duration * (1-MAX_START_PERCENT/100))
+    local candidates, best, winners = eligible_percentages(history, maximum), math.huge, {}
     local now = os.time()
     for _, p in ipairs(candidates) do
         local first, score = duration * p / 100, 0
@@ -469,7 +553,7 @@ end
 local function finish_long()
     restore_fade(active_long)
     active_long = nil
-    save_sections()
+    if not options.managed then save_sections() end
 end
 local function begin_long(key, title, duration, start, planned_seconds)
     local speed = mp.get_property_number("speed", 1)
@@ -483,6 +567,7 @@ local function record_interval(c, first, last)
     if not item or math.abs(item.last - first) > 0.75 then
         item = {key=c.key, title=c.title, duration=c.duration, first=first, last=last}
         heard[#heard+1] = item
+        if options.managed then managed_pending[#managed_pending+1] = item end
         c.open = item
     end
     item.last = math.min(last, c.duration)
@@ -506,7 +591,7 @@ local function advance_section(c)
 end
 local function tick_sections()
     local c = active_long
-    if not c then return end
+    if not c or (options.managed and not managed_playing) then return end
     local now = mp.get_time()
     local pos = mp.get_property_number("time-pos")
     local speed = mp.get_property_number("speed", 1)
@@ -533,7 +618,7 @@ local function tick_sections()
             else c.open = nil end
         end
         c.previous = {time=now, pos=pos, speed=speed}
-        if c.limit then
+        if c.limit and not options.managed then
             local left = c.limit - c.elapsed
             if left <= 0.05 then advance_section(c); return end
             local fade_length = math.min(options.fade_seconds, c.limit)
@@ -545,10 +630,18 @@ local function tick_sections()
             end
         end
     end
-    if dirty and now - last_checkpoint >= options.checkpoint_seconds then save_sections() end
+    if not options.managed and dirty and now - last_checkpoint >= options.checkpoint_seconds then save_sections() end
 end
-mp.add_periodic_timer(0.5, tick_sections)
-mp.register_event("seek", function() restore_fade(active_long); break_interval(); save_sections() end)
+mp.add_periodic_timer(0.5, function()
+    if options.managed and mp.get_time() - last_controller_seen > 15 then
+        mp.msg.warn("Radio controller disconnected; stopping this managed player.")
+        mp.commandv("quit")
+        return
+    end
+    tick_sections(); publish_status()
+end)
+mp.register_script_message("radio-heartbeat", function() last_controller_seen = mp.get_time() end)
+mp.register_event("seek", function() restore_fade(active_long); break_interval(); if not options.managed then save_sections() end end)
 mp.register_event("playback-restart", break_interval)
 for _, property in ipairs({"pause", "paused-for-cache", "mute", "seeking"}) do
     mp.observe_property(property, "bool", function() break_interval() end)
@@ -562,7 +655,9 @@ load_persistent_track_history()
 local generation = 0
 local function invalidate_callbacks()
     generation = generation + 1
+    prepared, managed_playing = nil, false
     finish_long()
+    publish_status()
 end
 mp.register_event("start-file", invalidate_callbacks)
 mp.register_event("end-file", invalidate_callbacks)
@@ -582,7 +677,7 @@ mp.register_event("file-loaded", function()
     local playlist = mp.get_property_native("playlist", {}) or {}
     local blocked = blocked_track_keys(playlist)
 
-    if key and blocked[key] then
+    if not options.managed and key and blocked[key] then
         local target = next_nonrecent_index(playlist, blocked)
         if target ~= nil then
             mp.msg.info("Skipping recently played track: " .. title)
@@ -597,15 +692,14 @@ mp.register_event("file-loaded", function()
 
     -- Log accepted starts, not completed listens. Automatically filtered
     -- repeats are not logged. Short/long tracks and single-file playback are.
-    remember_track(key, title)
+    if not options.managed then remember_track(key, title) end
 
     mp.add_timeout(1, function()
         if generation ~= expected_generation then return end
 
         local duration = mp.get_property_number("duration")
-        if not duration or duration <= 0 then
-            return
-        end
+        prepared = {key=key, title=title}
+        if not duration or duration <= 0 then publish_status(); return end
 
         -- Short tracks play from the beginning.
         -- They still remain in recent-track history, but they do NOT
@@ -613,10 +707,10 @@ mp.register_event("file-loaded", function()
         if duration < MIN_RANDOM_START_DURATION then
             mp.msg.info(
                 string.format(
-                    "Full-track playback: %s (%d:%02d, under 20 min)",
+                    "Full-track playback: %s (%d:%02d, under %.0f min)",
                     title,
                     math.floor(duration / 60),
-                    math.floor(duration % 60)
+                    math.floor(duration % 60), options.min_duration_minutes
                 )
             )
             mp.osd_message("Short track: no random jump", 2)
@@ -632,9 +726,13 @@ mp.register_event("file-loaded", function()
             planned = math.random(math.max(1, math.floor(options.section_min_minutes * 60)),
                 math.max(1, math.floor(options.section_max_minutes * 60)))
         end
+        if options.managed then
+            heard = read_sections(SECTION_FILE) or read_sections(SECTION_FILE .. ".bak") or {}
+        end
         local percent_history = read_percent_history()
         local speed = mp.get_property_number("speed", 1)
         if not finite(speed) or speed <= 0 then speed = 1 end
+        if planned then planned = math.min(planned, duration / speed) end
         local percent, exposure = select_section(key, duration, percent_history, planned and planned * speed)
         local start = duration * percent / 100
         local ok, err = mp.commandv("seek", tostring(start), "absolute", "exact")
@@ -642,7 +740,8 @@ mp.register_event("file-loaded", function()
             mp.msg.warn("Section seek failed: " .. tostring(err))
             return
         end
-        save_percent_history(percent_history, percent)
+        if options.managed then prepared.percent = percent
+        else save_percent_history(percent_history, percent) end
         begin_long(key, title, duration, start, planned)
         local label = string.format("Fresh-section start: %d%% (%s)", percent, clock(start))
         if planned then label = label .. " | sample up to " .. clock(active_long.limit) end
@@ -650,139 +749,132 @@ mp.register_event("file-loaded", function()
         mp.msg.info(string.format("%s: %s; weighted recent overlap %.3f", title, label, exposure))
     end)
 end)
+
+-- The controller sends these commands one deck at a time and waits for sequence
+-- acknowledgement. Preloading alone never counts as an accepted/heard track.
+mp.register_script_message("radio-activate", function()
+    if not options.managed or not prepared or managed_playing then return end
+    recent_tracks = {}
+    load_persistent_track_history()
+    remember_track(prepared.key, prepared.title)
+    if prepared.percent then save_percent_history(read_percent_history(), prepared.percent) end
+    managed_playing = true
+    break_interval()
+    command_sequence = command_sequence + 1
+    publish_status()
+end)
+mp.register_script_message("radio-checkpoint", function()
+    if not options.managed then return end
+    save_sections()
+    command_sequence = command_sequence + 1
+    publish_status()
+end)
+mp.register_script_message("radio-finish", function()
+    if not options.managed then return end
+    tick_sections()
+    finish_long()
+    save_sections()
+    prepared, managed_playing = nil, false
+    command_sequence = command_sequence + 1
+    publish_status()
+end)
+
+mp.register_script_message("radio-ping", function()
+    command_sequence = command_sequence + 1
+    publish_status()
+end)
 ```
 <!-- END RADIO LUA -->
 
-## 5. Optional section sampling (leave off for uninterrupted mixes)
+## 5. Enable sampling and copy the controller
 
-Without extra settings, long mixes continue from the chosen point until they end or you stop playback. To instead rotate through long mixes, create `C:\MPV\portable_config\script-opts\random-start.conf` with:
+Copy `Radio.ps1`, `Check-Radio.ps1`, `Check Radio.cmd`, and `Stop Radio.cmd` from this repository's `payload` directory into `C:\MPV`. No Python or extra PowerShell module is required; Windows PowerShell 5.1 is sufficient.
+
+Save `C:\MPV\portable_config\script-opts\random-start.conf` as **All files**, containing:
 
 ```ini
 section_mode=yes
-section_min_minutes=20
-section_max_minutes=40
+min_duration_minutes=15
+section_min_minutes=10
+section_max_minutes=30
+crossfade_seconds=5
 fade_seconds=5
 ```
 
-Restart MPV. Sampling selects a fresh 20-40-minute listening allowance for each qualifying mix, capped by remaining content. Pauses, detected seeks, buffering and muted time do not use that allowance. Normal songs under 20 minutes are not truncated. Fade-out is a volume ramp, not a crossfade; there may be a network gap before the next item. Set `section_mode=no` to disable sampling.
+These active settings are also supplied as [random-start.conf](payload/portable_config/script-opts/random-start.conf). Sampling applies only to seekable recordings at least 15 minutes long. An allowance is capped to the recording's duration and the start is selected early enough to fit it. Set `section_mode=no` for uninterrupted long mixes; set `crossfade_seconds=0` for no overlap. Restart playback after changes.
 
-These are **three different controls**: recording eligibility (20 minutes), optional per-mix sampling allowance (20-40 minutes), and the overall task runtime (for example three hours). Do not substitute one for another.
+The controller preloads a second MPV and overlaps their gains. The standalone Lua file still works with ordinary MPV, but its sequential fade does not overlap tracks. Both controlled players use the configured output in shared audio mode.
 
-A complete optional template is at [random-start.conf.example](payload/portable_config/script-opts/random-start.conf.example). It is not loaded or installed automatically. Advanced options cover the selection look-ahead, recency decay, bounded history and checkpoint interval. For sampling on one task only, add `--script-opts-append=random-start-section_mode=yes` to that task's arguments instead of enabling it globally.
+## 6. Test audio and the script connection
 
-## 6. Test audio and history before scheduling
-
-In Command Prompt at `C:\MPV`:
+In Command Prompt at `C:\MPV`, run a three-minute test:
 
 ```bat
-yt-dlp.exe --version
-mpv.com --shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 180
 ```
 
-This Morning sample is optional; substitute your own playlist. Confirm the expected speaker and player controls. Long mixes should display a fresh-section starting message; short songs should not jump randomly. Listen long enough to create a checkpoint (normally 15 seconds). Test a pause and a manual seek, then close MPV normally and inspect:
+Open **Check Radio.cmd** while it plays. Both players should reply and acknowledge a Lua ping. Verify `managed=True`, `section_mode=True`, cutoff `15`, sample range `10` to `30`, and crossfade seconds `5`. This checks the running processes, not only installed filenames. Confirm your physical speaker separately. A three-minute test verifies startup; leave it longer or use N to test a transition.
 
-```text
-C:\MPV\portable_config\recent-track-history.txt
-C:\MPV\portable_config\random-start-history.txt
-C:\MPV\portable_config\heard-sections.txt
-```
+Controller console keys: **Space** pauses both decks, **N** moves to the next track, **+/-** adjusts volume, and **Q** stops. `Stop Radio.cmd` also stops playback. Paused time still counts toward the whole session's wall-clock duration.
 
-The last file's final column is the recording range, such as `42:37-68:10`. It contains estimated forward-played intervals, not buffered audio or proof someone was listening. Pauses, seeks and sleep gaps are not joined into a false continuous listen. The first two histories retain their established formats.
-
-Section state is bounded (40 intervals per recording, 2,000 overall, 180 days by default), and only one MPV process should write it. A forced termination can lose the unsaved tail; `.bak` stores a previous complete checkpoint. Existing track history cannot reconstruct previously heard intervals. Unknown-duration/non-seekable media are left alone. See README for selection limitations and configurable settings.
+Histories remain in `portable_config`: `recent-track-history.txt` retains ten accepted starts, `random-start-history.txt` retains ten accepted random percentages, and `heard-sections.txt` records estimated played ranges such as `42:37-68:10`. Preloading does not add a played track. The controller serializes checkpoints so both sides of the crossfade are retained. Do not run a separate standalone radio script against the same histories simultaneously.
 
 ## 7. Create the Morning task manually
 
-Open **Task Scheduler -> Create Task**, not Create Basic Task. Name it **Music - Morning**. On **General**, select your normal Windows user and **Run only when user is logged on**. Do not enable highest privileges. A locked screen still leaves you logged in; signing out does not.
+Open **Task Scheduler -> Create Task**. Name it **Music - Morning**. On **General**, select your normal user and **Run only when user is logged on**; highest privileges are unnecessary. Locked is okay; signed out is not.
 
-On **Triggers -> New**, choose **On a schedule -> Weekly -> Every 1 week**, select **Monday-Saturday**, leave Sunday unchecked, choose **06:45 AM**, and enable it. These are suggestions; use your preferred local time/days.
+On **Triggers -> New**, choose a weekly schedule, **Monday-Saturday**, **06:45 AM**, enabled. Use your preferred local time and days if different.
 
-On **Actions**, create these two **Start a program** actions in this order.
+On **Actions**, create **one Start a program action**. If upgrading, remove the old taskkill and direct-mpv actions first.
 
-**Action 1: stop accessible older MPV playback**
-
-Program/script:
+**Program/script:**
 
 ```text
-C:\Windows\System32\cmd.exe
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
 ```
 
-Add arguments:
+**Add arguments:**
 
 ```text
-/c "taskkill /F /IM mpv.exe >nul 2>&1 & exit /b 0"
+-NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 ```
 
-Leave **Start in** blank. If Windows is installed elsewhere, use its actual `System32\cmd.exe` path. This action closes accessible MPV instances, including manual videos; it is not limited to the morning player. Force-closing cannot guarantee a final history flush or fade.
-
-**Action 2: start the Morning playlist**
-
-Program/script:
-
-```text
-C:\MPV\mpv.exe
-```
-
-Add arguments:
-
-```text
---shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0"
-```
-
-Start in (no quotes needed):
+**Start in:**
 
 ```text
 C:\MPV
 ```
 
-Keep both actions in the same task. Do not use `--load-scripts=no` here; that bypasses all radio behavior.
+If Windows is installed elsewhere, use its real PowerShell path. Do not add the old `taskkill` action or a second direct-MPV action.
 
-On **Conditions**, leave the idle requirement off and enable **Wake the computer to run this task**. Leave the network-condition requirement off. AC-power restrictions are retained by the installer; use the same choices here or deliberately review battery behavior on a laptop.
+**Maximum runtime is a DURATION, not the time of day to stop.** `10800` seconds = 3 hours; `5400` = 90 minutes; `2700` = 45 minutes. The controller counts this duration from launch, including loading and pauses.
 
-On **Settings**, allow on-demand execution, leave missed-start catch-up off, retry failures every **5 minutes** up to **3** times, stop after **3 hours**, allow forced stopping, and choose **Do not start a new instance**. Do not enable automatic task deletion.
+On **Conditions**, enable **Wake the computer to run this task** and leave idle/network requirements off. Review AC-power restrictions on laptops.
 
-**Maximum runtime is a DURATION, not the time of day to stop.** Three hours after 06:45 is approximately 09:45 for an uninterrupted on-time run. Retry/delay/interruption can change actual timing. The scheduler limit is not a reliable fade-out timer.
+On **Settings**, allow on-demand execution, leave missed-start catch-up off, retry failures every **5 minutes**, at most **3** attempts, and choose **Do not start a new instance**. Set the safety stop to **3 hours 1 minute** for the example above, with forced stopping enabled. That extra minute allows cleanup; `-DurationSeconds 10800` is still the intended three-hour runtime.
 
 ## 8. Create the Day Finisher task
 
-Repeat the same task-creation process, changing these values:
-
-- Name: **Music - Day Finisher**.
-- Trigger suggestion: **15:45 / 3:45 PM, Monday-Friday**.
-- Maximum runtime suggestion: **3 hours** (editable).
-- Second action's **Add arguments**:
+Use the same setup, with name **Music - Day Finisher** and the suggested **15:45 / 3:45 PM, Monday-Friday** trigger. Its single action uses:
 
 ```text
---shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ"
+-NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 ```
 
-Keep the first action, executable path, working directory, speaker and radio script the same. These external sample playlists are optional and can change; they are not login credentials or music bundled with the project. See [playlist instructions](EXAMPLE-PLAYLISTS.md) to replace links in existing tasks without reinstalling.
-
-The tasks share local histories. Avoid overlapping schedules unless replacing current playback is intentional. The same-task duplicate setting does not prevent two differently named tasks from starting together.
+Keep the same PowerShell executable and working directory. A new radio session requests the previous radio controller to stop; it does not kill unrelated MPV windows. Both sessions share the same ten-track and section histories.
 
 ## 9. Test the scheduled task
 
-Close manually launched MPV first. Save the task, right-click it and choose **Run**. Verify playback on the selected speaker. A task may report that it is running while music continues; wait for completion to interpret its final result.
+Save, right-click the task, and choose **Run**. Open **Check Radio.cmd** and listen for the intended speaker. Test a real scheduled start a few minutes ahead, then a locked-session start and wake-from-sleep separately. Restore your preferred schedule afterward. A powered-off PC cannot be started by Task Scheduler; the speaker must also remain available.
 
-For a real schedule test, temporarily choose a start a few minutes ahead, lock Windows, and verify it starts. Test waking separately with the speaker connected. Restore your desired time afterward. Task Scheduler cannot start a fully powered-off PC; wake support and Windows wake timers matter. Speakers that power off or disconnect must be made available separately.
-
-Do not create new copies of these tasks each time you change a playlist. Edit the existing action or disable the older task first.
+A missing next track is retried with another entry. Slow YouTube extraction or buffering may still cause gaps. If the controller is force-killed, its players exit after 15 seconds without heartbeats. Force-kills can lose the latest unsaved section checkpoint. Normal session ending stops the players; it is not a crossfade into another session.
 
 ## 10. Optional clipboard launchers and updates
 
-Without running the installer, copy these files from `payload` to `C:\MPV`:
+Copy the two `Play YouTube ...cmd` launchers, `Update yt-dlp.cmd`, and `README-LOCAL.txt` from `payload` to `C:\MPV`. Create shortcuts to the launchers. They play clipboard links outside the radio sampling/history system and ask a running radio session to stop. The video launcher permits resizable, always-on-top video up to 720p while keeping the configured audio output.
 
-- `Play YouTube on MPV Audio.cmd`
-- `Play YouTube Video - 720p Best Audio Always On Top.cmd`
-- `Update yt-dlp.cmd`
-- `README-LOCAL.txt`
+To update an existing installation, follow [the README upgrade steps](README.md#update-an-existing-working-computer). This version needs the controller files and a one-time task-action change for crossfade. Keep `mpv.conf` and existing histories. Replacing Lua alone enables sampling but cannot provide overlapping playback.
 
-Create desktop shortcuts to the first two. Copy a YouTube link, then open the desired launcher. The audio launcher keeps the configured output; the video launcher overrides audio-only mode, selects at most 720p video plus best available audio, and keeps a resizable window on top. These launchers close accessible existing MPV instances and use `--load-scripts=no`, so they do **not** randomize or contribute to radio history.
+## Reference
 
-If YouTube fails, update yt-dlp and follow its current upstream runtime guidance. For diagnostics use `mpv.com`, not only `mpv.exe`, so errors stay visible in Command Prompt. Verify the full speaker ID, the three exact config filenames, and only one active radio script. Keep backups and history files private.
-
-## Reference and upgrade notes
-
-The supported MPV mechanisms are documented in the [official manual](https://mpv.io/manual/stable/): Lua events/timers, script options, audio routing, seek and playlist commands. This guide supplies automation code, not third-party binaries or content rights; see [THIRD_PARTY.md](THIRD_PARTY.md).
-
-For code-only updates, close MPV, back up and replace `random-start.lua`, keep configuration/history files, then restart. The optional sampling `.conf` is separate and need not be recreated. Changes to this GitHub repository do not automatically update an installed computer.
+MPV's [official manual](https://mpv.io/manual/stable/) documents the player primitives: Lua events/timers, seeking, script options, audio routing, gapless playback, and JSON IPC. The project adds scheduling, selection policy, history coordination, and crossfading. MPV, yt-dlp and any required YouTube JavaScript runtime remain separately installed dependencies; see [THIRD_PARTY.md](THIRD_PARTY.md).
