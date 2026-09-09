@@ -9,9 +9,13 @@ yt-dlp.exe
 **/recent-track-history.txt
 **/heard-sections.txt*
 **/script-opts/random-start.conf
+!payload/portable_config/script-opts/random-start.conf
 **/setup-backups/
 
 # Local archives/downloads
 *.7z
 *.zip
 Downloads/
+
+radio-session.json*
+radio-stop.request

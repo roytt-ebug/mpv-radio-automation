@@ -1,88 +1,71 @@
-MPV RADIO AUTOMATION - LOCAL NOTES
-==================================
-Scheduled Windows background music using MPV + yt-dlp and your selected speaker.
-Short songs play normally. Long recordings favor less-recently-heard sections.
-Optional sampling rotates between long mixes; it is OFF by default.
+MPV RADIO AUTOMATION - YouTube radio with overlapping crossfades
 
-Main folder: C:\MPV
-Player: C:\MPV\mpv.exe (use mpv.com for console diagnostics)
-YouTube helper: C:\MPV\yt-dlp.exe
-Player configuration: C:\MPV\portable_config\mpv.conf
-Radio script: C:\MPV\portable_config\scripts\random-start.lua
+ACTIVE DEFAULTS
+Sampling ON. Only recordings at least 15 minutes long qualify.
+Each eligible recording receives a 10-30-minute allowance, capped to its
+own duration. A starting point is chosen early enough to fit the sample.
+Ordinary songs play through their endings. Crossfade is 5 seconds.
 
-PLAYBACK RULES
---------------
-Under 20 minutes: no random seek or sampling; normal playback.
-20+ minutes and seekable: choose a less-recently-heard start within 0%-75%.
-Ten accepted track starts persist, independently of the smaller repeat filter.
-Ten selected long-track percentages are retained separately.
-
-New per-recording interval history:
-C:\MPV\portable_config\heard-sections.txt
-Final column shows minutes:seconds-minutes:seconds, e.g. 42:37-68:10.
-This estimates forward player activity, not human attention or physical sound.
-Pauses, buffering, mute and detected seeks are excluded. State checkpoints
-normally every 15 seconds; hard termination can lose the unsaved tail.
-The .bak file is a previous complete checkpoint. Only one player should write.
-Defaults: up to 40 intervals per recording, 2000 overall, at most 180 days old.
-
-Existing histories remain:
-C:\MPV\portable_config\recent-track-history.txt
-C:\MPV\portable_config\random-start-history.txt
-Old start logs cannot reconstruct what sections were heard before this update.
-
-OPTIONAL SECTION SAMPLING
--------------------------
-Create C:\MPV\portable_config\script-opts\random-start.conf with:
+SETTINGS
+C:\MPV\portable_config\script-opts\random-start.conf
 section_mode=yes
-section_min_minutes=20
-section_max_minutes=40
+min_duration_minutes=15
+section_min_minutes=10
+section_max_minutes=30
+crossfade_seconds=5
 fade_seconds=5
 
-Restart MPV. Long mixes play 20-40 minutes of forward unmuted playback,
-or remaining content if shorter, then fade out and advance. Short songs
-are not cut. Set section_mode=no for uninterrupted long mixes again.
-The fade is not a crossfade or a fade for Task Scheduler's force-stop.
-This optional file is not created by the installer.
+Restart after edits. section_mode=no disables sampling.
+crossfade_seconds=0 disables overlap. fade_seconds only controls the
+standalone Lua fade; direct MPV playback cannot overlap playlist tracks.
 
-The 20-minute eligibility cutoff, 20-40-minute optional sample length,
-and a task's maximum runtime are three separate settings.
+VERIFY THE RUNNING SCRIPT
+While a radio task plays, double-click Check Radio.cmd. It queries both
+actual MPV players and checks that Lua acknowledges a harmless ping.
+Confirm two PASS reports, expected speaker, sampling ON, cutoff 15,
+sample range 10-30 and crossfade 5. In standalone MPV, F8 shows status.
+
+CONTROLS
+Radio controller console: Space pause, N next, +/- volume, Q stop.
+Stop Radio.cmd stops the current radio session. A new scheduled radio
+session stops the old controller, leaving unrelated MPV windows alone.
+
+SCHEDULED TASK ACTION (one action, no taskkill)
+Program: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Start in: C:\MPV
+Morning arguments:
+-NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
+Day Finisher arguments:
+-NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
+
 Maximum runtime is a DURATION, not the time of day to stop.
+10800 seconds = 3 hours; 5400 = 90 minutes; 2700 = 45 minutes.
+The duration includes loading and pauses. Set Task Scheduler's backup
+stop limit one minute longer to permit cleanup.
 
-SAMPLE PLAYLISTS AND TASK ARGUMENTS
-----------------------------------
-Morning:
---shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0"
-Day Finisher:
---shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ"
+UPGRADING
+Stop the old tasks and their MPV windows. Back up portable_config and
+export tasks. Copy the new payload contents into C:\MPV, keeping your
+mpv.conf and histories. The new random-start.conf supplies active defaults.
+Replace each old task's two actions with the controller action above.
+Keep your own triggers, days and duration. Run it and open Check Radio.cmd.
+Replacing only random-start.lua does not enable overlapping crossfade.
 
-In Task Scheduler edit the existing SECOND action that runs C:\MPV\mpv.exe.
-Keep Start in: C:\MPV and the first stop-old-MPV action unchanged.
-Do not create duplicate tasks. Keep your preferred times/days/runtime.
-For a fresh installer: S uses the displayed sample, URL uses your own,
-Enter skips that task and leaves any existing task unchanged.
+HISTORY
+portable_config/recent-track-history.txt: last 10 accepted starts.
+portable_config/random-start-history.txt: last 10 accepted percentages.
+portable_config/heard-sections.txt: estimated played ranges per recording.
+Preloaded tracks are not marked played. The two decks checkpoint serially,
+normally every 15 seconds. Do not run an unmanaged radio script against
+these files simultaneously. Paused, buffering, muted and seek gaps are
+excluded; this estimates player activity, not physical speaker output.
 
-UPDATE ONLY THE RADIO SCRIPT
------------------------------
-Close MPV. Back up the old Lua OUTSIDE the scripts folder. Replace
-C:\MPV\portable_config\scripts\random-start.lua with the new version.
-Keep mpv.conf, optional sampling settings and all histories. Restart.
-Do not rerun the installer solely for a Lua update.
-Manual launchers use --load-scripts=no and bypass histories and radio modes.
+LIMITS
+YouTube loading can still leave gaps. A killed controller's hidden players
+exit after 15 seconds without heartbeats; the unsaved history tail may be
+lost. Session endings are stops, not crossfades into the next session.
+Keep Windows logged in, speaker connected and wake timers available.
+Update yt-dlp and follow its current JavaScript-runtime instructions when
+YouTube extraction fails. No Spotify setup is used.
 
-TROUBLESHOOTING AND DOCUMENTATION
----------------------------------
-C:\MPV\mpv.com --no-config --load-scripts=no --audio-device=help
-C:\MPV\yt-dlp.exe --version
-C:\MPV\yt-dlp.exe -U
-
-Windows must remain logged in; locked is okay. Wake timers/speaker availability
-must permit playback. A powered-off PC is not started by Task Scheduler.
-Current scheduled starts close accessible MPV windows, including manual videos.
-For YouTube failures follow yt-dlp's current JavaScript-runtime guidance.
-
-https://github.com/roytt-ebug/mpv-radio-automation
-https://github.com/roytt-ebug/mpv-radio-automation/blob/main/MANUAL-SETUP.md
-https://github.com/roytt-ebug/mpv-radio-automation/blob/main/EXAMPLE-PLAYLISTS.md
-https://mpv.io/installation/
-https://github.com/yt-dlp/yt-dlp/releases/latest
+Full instructions: https://github.com/roytt-ebug/mpv-radio-automation

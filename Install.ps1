@@ -1,4 +1,4 @@
-# MPV Radio Automation setup helper, guided setup revision 3.
+# MPV Radio Automation setup helper, guided setup revision 4.
 # Requires Windows PowerShell 5.1. MPV must already be installed in C:\MPV.
 # -FunctionsOnly is for offline parser tests; it does not run installation.
 param(
@@ -185,12 +185,13 @@ function Read-MusicSession([string]$Name, [string]$DefaultTime, [string]$Default
 }
 
 function New-MusicTaskDefinition($Session, [string]$UserSid, [string]$MpvFolder) {
-    $kill = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\cmd.exe" -Argument '/c "taskkill /F /IM mpv.exe >nul 2>&1 & exit /b 0"'
-    $play = New-ScheduledTaskAction -Execute "$MpvFolder\mpv.exe" -Argument ('--shuffle --loop-playlist=inf "' + $Session.Playlist + '"') -WorkingDirectory $MpvFolder
+    $seconds = $Session.Runtime.TotalSeconds.ToString([cultureinfo]::InvariantCulture)
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $MpvFolder + '\Radio.ps1" -Playlist "' + $Session.Playlist + '" -DurationSeconds ' + $seconds
+    $play = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $arguments -WorkingDirectory $MpvFolder
     $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek ([System.DayOfWeek[]]$Session.Days) -At $Session.At
-    $settings = New-ScheduledTaskSettingsSet -WakeToRun -ExecutionTimeLimit $Session.Runtime -RestartInterval (New-TimeSpan -Minutes 5) -RestartCount 3 -MultipleInstances IgnoreNew
+    $settings = New-ScheduledTaskSettingsSet -WakeToRun -ExecutionTimeLimit ($Session.Runtime + (New-TimeSpan -Minutes 1)) -RestartInterval (New-TimeSpan -Minutes 5) -RestartCount 3 -MultipleInstances IgnoreNew
     $principal = New-ScheduledTaskPrincipal -UserId $UserSid -LogonType Interactive -RunLevel Limited
-    return New-ScheduledTask -Action @($kill, $play) -Trigger $trigger -Settings $settings -Principal $principal
+    return New-ScheduledTask -Action @($play) -Trigger $trigger -Settings $settings -Principal $principal
 }
 
 # Tests import only the functions above. No Windows calls, files or downloads.
@@ -216,7 +217,7 @@ try {
     }
     $sid = New-Object Security.Principal.SecurityIdentifier($TaskUserSid)
     $taskUser = $sid.Translate([Security.Principal.NTAccount]).Value
-    Write-Host "`nMPV Radio Automation - guided setup (revision 3)" -ForegroundColor Cyan
+    Write-Host "`nMPV Radio Automation - guided setup (revision 4)" -ForegroundColor Cyan
     Write-Host 'Type only your answer, then press Enter. Do not type the prompt or [brackets].'
     Write-Host 'Press Enter to accept a displayed default. Type Q at any input prompt to cancel.'
     Write-Host ("Computer time now: " + (Get-Date).ToString('yyyy-MM-dd HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture))
@@ -228,7 +229,7 @@ try {
             throw "Missing $InstallDir\$exe. Install MPV yourself first, then rerun INSTALL.cmd."
         }
     }
-    $payloadFiles = @('portable_config\scripts\random-start.lua','Play YouTube on MPV Audio.cmd','Play YouTube Video - 720p Best Audio Always On Top.cmd','Update yt-dlp.cmd','README-LOCAL.txt')
+    $payloadFiles = @('Radio.ps1','Check-Radio.ps1','Check Radio.cmd','Stop Radio.cmd','portable_config\script-opts\random-start.conf','portable_config\scripts\random-start.lua','Play YouTube on MPV Audio.cmd','Play YouTube Video - 720p Best Audio Always On Top.cmd','Update yt-dlp.cmd','README-LOCAL.txt')
     foreach ($relative in $payloadFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $PayloadDir $relative) -PathType Leaf)) {
             throw "Missing payload file: $relative. Extract the WHOLE project ZIP before running INSTALL.cmd."
@@ -287,7 +288,10 @@ try {
         @($_.Actions | Where-Object { $_.Execute -ieq "$InstallDir\mpv.exe" }).Count -gt 0
     })
     foreach ($old in $otherMpv) { Write-Warning "Existing task '$($old.TaskName)' will remain unchanged. Check for overlapping schedules." }
-    Write-Host "`nScheduled starts close any accessible mpv.exe, including manually opened videos."
+    Write-Host "`nScheduled starts use two MPV players with a five-second crossfade."
+    Write-Host 'Sampling ON: recordings 15+ minutes; sections 10-30 minutes (or remaining content).'
+    Write-Host 'Only this controller session is stopped when the next radio session starts.'
+    Write-Host 'The controller enforces your duration; Task Scheduler allows one extra minute for cleanup.'
     Write-Host 'Tasks require the selected user to be logged in. Locked is OK. AC-power conditions are retained.'
     Write-Host 'Wake request ON; catch-up after a missed start OFF; retry 5 minutes x 3; ignore duplicate task starts.'
     Write-Host 'A start time already passed today waits for the next selected day. Use Run in Task Scheduler to test now.'

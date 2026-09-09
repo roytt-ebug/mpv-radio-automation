@@ -1,6 +1,6 @@
 # Sample music playlists
 
-These contributor-approved samples are now shown **inside guided setup (revision 3)**. At either task's playlist prompt, type **S** and press Enter to use the sample shown for that task. You may instead paste your own URL, or press Enter without typing to skip. A blank answer never automatically selects music and leaves an existing task unchanged.
+These contributor-approved samples are now shown **inside guided setup (revision 4)**. At either task's playlist prompt, type **S** and press Enter to use the sample shown for that task. You may instead paste your own URL, or press Enter without typing to skip. A blank answer never automatically selects music and leaves an existing task unchanged.
 
 ## Morning Music
 
@@ -32,25 +32,23 @@ The installer suggests **15:45 (3:45 PM), Monday-Friday, for three hours**. Choo
 
 Updating this repository does **not** change tasks already saved on your PC. There is no need to reinstall MPV or replace the Lua script just to change playlists.
 
-1. Open Windows Task Scheduler and open the existing morning music task's **Properties**.
-2. On **Actions**, select the action that starts `C:\MPV\mpv.exe` and click **Edit**. In the standard setup, this is the second action. Leave the first stop-old-MPV action unchanged.
-3. Replace **Add arguments** with the Morning Music line below. Keep **Program/script** as `C:\MPV\mpv.exe` and **Start in** as `C:\MPV`.
-4. Save, then repeat for the Day Finisher task using its corresponding line. Keep your chosen triggers, days, output device and runtime limits unchanged.
-5. The replacement URL is used on the next task start. To test immediately, right-click the task and choose **Run**; the task will stop the currently accessible MPV playback first.
+1. Open the existing task's **Properties -> Actions** and edit its PowerShell controller action.
+2. Change only the URL after `-Playlist`. Keep the `-DurationSeconds` value, triggers, and days.
+3. If the task still has the old taskkill + direct-MPV actions, first follow [the controller upgrade instructions](README.md#update-an-existing-working-computer).
 
-**Morning Music - Add arguments:**
+**Morning Music - Add arguments (three hours):**
 
 ```text
---shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0"
+-NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 ```
 
-**Day Finisher - Add arguments:**
+**Day Finisher - Add arguments (three hours):**
 
 ```text
---shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ"
+-NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Radio.ps1" -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 ```
 
-In the installer, use **S** or paste **only the URL**, not the `--shuffle` command. The installer supplies the command-line options automatically. In Task Scheduler's **Add arguments**, use the full line with the options as shown above. **S is an installer choice, not an mpv command or a playlist URL.**
+The executable is `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, with `C:\MPV` as **Start in**. In the installer enter **S** or only the URL; it supplies the command automatically. **S is an installer choice, not a player command.**
 
 ## Availability and privacy
 

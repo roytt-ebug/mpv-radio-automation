@@ -22,6 +22,7 @@ local function boot(config,files)
     local s={files=files or {}, now=0, epoch=1788918000, events={}, observers={}, timers={}, ticks={}, commands={}, props={volume=80,speed=1,seekable=true}, warnings={}}
     local env=setmetatable({}, {__index=_G})
     env.require=function(name)
+        if name=='mp.utils' then return {format_json=function(o) s.status=o; return 'status' end} end
         assert(name=='mp.options'); return {read_options=function(o) for k,v in pairs(config or {}) do o[k]=v end end}
     end
     env.os={
@@ -50,6 +51,10 @@ local function boot(config,files)
     function s:emit(event) for _,fn in ipairs(self.events[event] or {}) do fn() end end
     function s:set(name,value) self.props[name]=value; for _,fn in ipairs(self.observers[name] or {}) do fn(name,value) end end
     env.mp={
+        command_native=function(args) assert(args[1]=='expand-path'); return root end,
+        set_property=function(k,v) s.props[k]=v end,
+        add_key_binding=function() end,
+        register_script_message=function(k,fn) s.events[k]={fn} end,
         get_time=function() return s.now end,
         get_property=function(k,default) local v=s.props[k]; if v==nil then return default end; return v end,
         get_property_number=function(k,default) local v=s.props[k]; if v==nil then return default end; return v end,
@@ -108,9 +113,9 @@ if ... == 'harness' then return {boot=boot, rows=rows, playlist=playlist, url=ur
 local one=playlist(1); local s=boot(); s:load(one,0,7200)
 local start=s.props['time-pos']; s:play(60); s:emit('end-file')
 local r=ranges(s.files[SECTIONS]); eq(#r,1,'one continuous interval'); near(r[1].a,start+0.5,'range start'); near(r[1].b,start+60,'range end')
-eq(r[1].b<7200,true,'not pretending rest was heard'); eq(s:count('playlist-next'),0,'sampling disabled by default')
+eq(r[1].b<7200,true,'not pretending rest was heard'); eq(s:count('playlist-next'),0,'default sample has not elapsed')
 -- Short tracks still log accepted starts but never receive a random seek or section timer.
-s=boot({section_mode=true,section_min_minutes=0.1,section_max_minutes=0.1}); s:load(one,0,1199); s:play(30); s:emit('end-file')
+s=boot({section_mode=true,section_min_minutes=0.1,section_max_minutes=0.1}); s:load(one,0,899); s:play(30); s:emit('end-file')
 eq(s:count('seek'),0,'short no seek'); eq(s.files[SECTIONS],nil,'short no section history'); eq(#rows(s.files[TRACK]),1,'short track retained'); eq(s:count('playlist-next'),0,'short not sampled')
 -- Pause, buffering, seeking, muting and a suspended process do not bridge gaps.
 s=boot(); s:load(one,0,7200); s:play(10)
@@ -171,8 +176,37 @@ s=boot({section_mode=true,section_min_minutes=0.1,section_max_minutes=0.1}); s.p
 s=boot({history_per_recording=3}); one[1].title='Jazz | Cafe\nnew row'; s:load(one,0,7200)
 for i=1,8 do s:seek(i*300); s:play(3) end; s:emit('end-file'); r=ranges(s.files[SECTIONS]); eq(#r,3,'per-recording cap'); eq(r[3].title,'Jazz   Cafe new row','safe title fields')
 -- Retained tracks and percentage history remain ten entries.
-s=boot(); one=playlist(1)
+s=boot({section_mode=false}); one=playlist(1)
 for i=1,15 do s:load(one,0,1200) end
 eq(#rows(s.files[TRACK]),10,'ten track starts kept'); eq(#rows(s.files[PERCENT]),10,'ten percentages kept')
 local seen={}; for _,p in ipairs(rows(s.files[PERCENT])) do local n=tonumber(p:match('|(%d+)$')); eq(seen[n],nil,'percentage exclusion kept'); seen[n]=true end
+-- New defaults and cutoff: 14:59 stays intact; 15:00 is eligible.
+s=boot(); eq(s.status.section_mode,true,'sampling default enabled'); eq(s.status.min_duration_minutes,15,'cutoff exposed')
+eq(s.status.section_min_minutes,10,'minimum sample exposed'); eq(s.status.section_max_minutes,30,'maximum sample exposed')
+s:load(one,0,899); eq(s:count('seek'),0,'14:59 untouched')
+s:load(one,0,900); eq(s:count('seek'),1,'15:00 eligible')
+s=boot({section_mode=false}); s:load(one,0,7200); s:play(2000); eq(s:count('playlist-next'),0,'explicit opt-out still works')
+-- Sampling fits within the source: a 15-minute recording cannot offer 30 minutes.
+s=boot({section_min_minutes=10,section_max_minutes=10}); s:load(one,0,900)
+eq(s.props['time-pos']<=300,true,'a full ten-minute sample fits')
+s=boot({section_min_minutes=30,section_max_minutes=30}); s:load(one,0,900)
+eq(s.props['time-pos'],0,'sample capped to source starts at zero'); s:tick(0.5,nil); near(s.status.sample_limit,900,'sample capped to recording duration')
+-- Preload is not listening; serialized checkpoints merge both sides of an overlap.
+local shared={}; local a=boot({managed=true,section_min_minutes=1,section_max_minutes=1},shared)
+local b=boot({managed=true,section_min_minutes=1,section_max_minutes=1},shared)
+a:load(one,0,7200); b:load(playlist(2),1,7200)
+eq(shared[TRACK],nil,'preloads not logged'); eq(shared[PERCENT],nil,'preloaded seek not saved')
+a:emit('radio-activate'); a:play(4); a:emit('radio-checkpoint')
+b:emit('radio-activate'); b:play(3); b:emit('radio-checkpoint')
+a:play(3); a:emit('radio-finish'); b:play(3); b:emit('radio-finish')
+r=ranges(shared[SECTIONS]); eq(#r,2,'both decks saved one interval without duplication')
+local total=0; for _,v in ipairs(r) do total=total+v.b-v.a end
+near(total,12,'both audible overlap intervals retained'); eq(#rows(shared[TRACK]),2,'one history shared across decks')
+eq(#rows(shared[PERCENT]),2,'only accepted starts saved percentages')
+-- Managed samples never auto-advance: the controller owns overlap and track changes.
+s=boot({managed=true,section_min_minutes=0.1,section_max_minutes=0.1}); s:load(one,0,7200); s:emit('radio-activate'); s:play(8)
+eq(s:count('playlist-next'),0,'controller owns transitions'); eq(s.status.remaining,0,'controller sees sample expiry')
+local seq=s.status.sequence; s:emit('radio-ping'); eq(s.status.sequence,seq+1,'status check is acknowledged')
+-- A dead controller cannot leave hidden MPV audio running indefinitely.
+s=boot({managed=true}); s:tick(16,nil); eq(s:count('quit'),1,'orphan deck exits after heartbeat timeout')
 print('PASS: '..checks..' section-selection, tracking, persistence, sampling and regression checks (mocked MPV).')

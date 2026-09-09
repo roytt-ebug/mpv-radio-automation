@@ -8,7 +8,7 @@ REM Usage:
 REM   1. Copy a YouTube video/playlist URL to the clipboard.
 REM   2. Double-click this file.
 REM
-REM This stops any currently running mpv.exe, then starts the
+REM This requests the radio session to stop, then starts the
 REM copied URL in MPV. The normal MPV config still routes audio
 REM to the configured output, but automatic Lua scripts are
 REM disabled so manually selected media plays from its normal start.
@@ -25,6 +25,6 @@ if not defined URL (
     exit /b 1
 )
 
-taskkill /IM mpv.exe /F >nul 2>&1
+if exist "%~dp0Radio.ps1" powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Radio.ps1" -Stop
 start "" "C:\MPV\mpv.exe" --load-scripts=no "%URL%"
 exit /b 0

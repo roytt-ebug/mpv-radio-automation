@@ -9,7 +9,7 @@ REM   1. Copy a YouTube video URL to the clipboard.
 REM   2. Double-click this file.
 REM
 REM Behavior:
-REM   - Stops any currently running mpv.exe instance.
+REM   - Requests the radio controller to stop its own players.
 REM   - Opens the copied YouTube URL in a resizable MPV window.
 REM   - Keeps the MPV window always on top.
 REM   - Limits video quality to 720p or lower.
@@ -29,7 +29,7 @@ if not defined URL (
     exit /b 1
 )
 
-taskkill /IM mpv.exe /F >nul 2>&1
+if exist "%~dp0Radio.ps1" powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Radio.ps1" -Stop
 
 start "" "C:\MPV\mpv.exe" ^
     --load-scripts=no ^

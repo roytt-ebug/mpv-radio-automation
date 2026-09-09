@@ -8,10 +8,10 @@
 --   * MPV handles playlist shuffle.
 --   * The last 10 accepted track starts are saved across restarts.
 --   * Retention is separate from repeat protection, so small playlists still play.
---   * Tracks shorter than 20 minutes are not randomly seeked.
---   * Tracks 20+ minutes favor less-recently-heard sections within 0%-75%.
+--   * Tracks shorter than 15 minutes are not randomly seeked.
+--   * Tracks 15+ minutes favor less-recently-heard sections within 0%-75%.
 --   * Estimated played intervals checkpoint every 15 seconds.
---   * Optional 20-40 minute section sampling with fade-out is OFF by default.
+--   * 10-30 minute section sampling is ON by default.
 --   * The last 10 random-start percentages are remembered across MPV restarts.
 --   * Exact recent percentages are not reused, and the new percentage
 --     tries to stay at least 6 percentage points away from the previous one.
@@ -28,15 +28,17 @@ math.random()
 -- =========================
 
 local MAX_START_PERCENT = 75
+local CONFIG_DIR = mp.command_native({"expand-path", "~~/"})
+if not CONFIG_DIR:match("[/\\]$") then CONFIG_DIR = CONFIG_DIR .. "/" end
 
 -- Only tracks this long or longer get a random start.
--- 20 minutes = 1200 seconds.
-local MIN_RANDOM_START_DURATION = 20 * 60
+-- 15 minutes = 900 seconds.
+local MIN_RANDOM_START_DURATION = 15 * 60
 
 local PERCENT_HISTORY_SIZE = 10
 local MIN_PERCENT_GAP_FROM_LAST = 6
 local PERCENT_HISTORY_FILE =
-    "C:\\MPV\\portable_config\\random-start-history.txt"
+    CONFIG_DIR .. "random-start-history.txt"
 
 -- History retention is independent of the number of playlist entries.
 -- Increase this value to retain more than 10 track starts.
@@ -48,7 +50,7 @@ local MAX_RECENT_TRACKS = 5
 local PERSIST_TRACK_HISTORY = true
 
 local TRACK_HISTORY_FILE =
-    "C:\\MPV\\portable_config\\recent-track-history.txt"
+    CONFIG_DIR .. "recent-track-history.txt"
 
 -- =========================
 -- PERCENTAGE HISTORY
@@ -232,9 +234,12 @@ end
 -- These are estimated played intervals, not proof that a person heard sound.
 -- One active player must own these files. No buffered/downloaded span is counted.
 local options = {
-    section_mode = false,
-    section_min_minutes = 20,
-    section_max_minutes = 40,
+    section_mode = true,
+    managed = false,
+    min_duration_minutes = 15,
+    crossfade_seconds = 5,
+    section_min_minutes = 10,
+    section_max_minutes = 30,
     fade_seconds = 5,
     preference_window_minutes = 20,
     recency_half_life_days = 14,
@@ -254,9 +259,12 @@ local function checked_option(name, default, minimum, maximum)
         options[name] = default
     end
 end
-checked_option("section_min_minutes", 20, 0.01, 1440)
-checked_option("section_max_minutes", 40, 0.01, 1440)
+checked_option("section_min_minutes", 10, 0.01, 1440)
+checked_option("section_max_minutes", 30, 0.01, 1440)
 checked_option("fade_seconds", 5, 0, 60)
+checked_option("crossfade_seconds", 5, 0, 60)
+checked_option("min_duration_minutes", 15, 0.01, 1440)
+MIN_RANDOM_START_DURATION = options.min_duration_minutes * 60
 checked_option("preference_window_minutes", 20, 0.01, 1440)
 checked_option("recency_half_life_days", 14, 0.01, 3650)
 checked_option("history_max_age_days", 180, 1, 3650)
@@ -264,13 +272,55 @@ checked_option("history_max_intervals", 2000, 10, 10000)
 checked_option("history_per_recording", 40, 1, 200)
 checked_option("checkpoint_seconds", 15, 1, 300)
 if options.section_min_minutes > options.section_max_minutes then
-    mp.msg.warn("Section minimum exceeds maximum; using 20-40 minutes.")
-    options.section_min_minutes, options.section_max_minutes = 20, 40
+    mp.msg.warn("Section minimum exceeds maximum; using 10-30 minutes.")
+    options.section_min_minutes, options.section_max_minutes = 10, 30
 end
-local SECTION_FILE = "C:\\MPV\\portable_config\\heard-sections.txt"
+local SECTION_FILE = CONFIG_DIR .. "heard-sections.txt"
 local SECTION_HEADER = "# MPV heard-sections v1"
 local heard, dirty = {}, false
 local active_long
+local prepared, managed_playing = nil, false
+local managed_pending = {}
+local command_sequence = 0
+local last_controller_seen = mp.get_time()
+local VERSION = "2026.09-radio-crossfade-1"
+local json = require("mp.utils").format_json
+local function publish_status()
+    local pos = mp.get_property_number("time-pos", 0)
+    local duration = mp.get_property_number("duration", 0)
+    local speed = math.max(0.01, mp.get_property_number("speed", 1))
+    local remaining = duration > 0 and math.max(0, (duration - pos) / speed) or -1
+    if active_long and active_long.limit then remaining = math.min(remaining, math.max(0, active_long.limit-active_long.elapsed)) end
+    local status = {
+        version=VERSION, managed=options.managed, ready=prepared ~= nil,
+        playing=managed_playing, sequence=command_sequence,
+        section_mode=options.section_mode, min_duration_minutes=options.min_duration_minutes,
+        section_min_minutes=options.section_min_minutes, section_max_minutes=options.section_max_minutes,
+        fade_seconds=options.fade_seconds, crossfade_seconds=options.crossfade_seconds,
+        checkpoint_seconds=options.checkpoint_seconds, path=mp.get_property("path", ""),
+        title=mp.get_property("media-title", ""), remaining=remaining, position=pos,
+        sample_limit=active_long and active_long.limit or 0,
+        paused=mp.get_property_native("pause", false),
+        buffering=mp.get_property_native("paused-for-cache", false),
+        seeking=mp.get_property_native("seeking", false),
+        eof=mp.get_property_native("eof-reached", false),
+        audio_device=mp.get_property("audio-device", "auto")
+    }
+    mp.set_property("user-data/radio-status", json(status))
+end
+local function show_status()
+    local text = string.format("Radio %s | %s | cutoff %.0f min | samples %s %.0f-%.0f min | %s",
+        VERSION, options.managed and "controller connected" or "standalone script loaded",
+        options.min_duration_minutes, options.section_mode and "ON" or "OFF",
+        options.section_min_minutes, options.section_max_minutes,
+        options.managed and ("crossfade " .. options.crossfade_seconds .. " s") or "sequential fade (no overlap)")
+    mp.msg.info(text)
+    mp.osd_message(text, 8)
+    publish_status()
+end
+mp.add_key_binding("F8", "radio-status", show_status)
+mp.register_script_message("radio-status", show_status)
+show_status()
 local last_checkpoint = mp.get_time()
 local function clock(seconds)
     seconds = math.max(0, math.floor(seconds))
@@ -315,6 +365,24 @@ heard = read_sections(SECTION_FILE) or read_sections(SECTION_FILE .. ".bak") or 
 prune_heard()
 local function save_sections()
     if not dirty then return end
+    if options.managed then
+        local current = read_sections(SECTION_FILE) or read_sections(SECTION_FILE .. ".bak") or {}
+        for _, item in ipairs(managed_pending) do
+            if item.saved then
+                for i = #current, 1, -1 do
+                    local old = current[i]
+                    if old.key == item.key and old.first == item.saved.first
+                        and old.last == item.saved.last and old.heard_at == item.saved.heard_at then
+                        table.remove(current, i)
+                        break
+                    end
+                end
+            end
+            current[#current+1] = item
+        end
+        table.sort(current, function(a,b) return a.heard_at < b.heard_at end)
+        heard = current
+    end
     prune_heard()
     local temporary, backup = SECTION_FILE .. ".tmp", SECTION_FILE .. ".bak"
     local file, err = io.open(temporary, "w")
@@ -347,30 +415,42 @@ local function save_sections()
         mp.msg.warn("Cannot replace section history; previous copy retained.")
         return
     end
+    if options.managed then
+        for _, item in ipairs(managed_pending) do
+            item.saved = {first=tonumber(string.format("%.3f",item.first)),
+                last=tonumber(string.format("%.3f",item.last)), heard_at=item.heard_at}
+        end
+        -- Only the open interval can change again; older entries are now on disk.
+        managed_pending = active_long and active_long.open and {active_long.open} or {}
+    end
     dirty = false
     last_checkpoint = mp.get_time()
 end
-local function eligible_percentages(history)
+local function eligible_percentages(history, maximum)
     local recent, candidates = {}, {}
     for _, item in ipairs(history) do recent[item.percent] = true end
     local last = history[#history] and history[#history].percent
-    for p = 0, MAX_START_PERCENT do
+    for p = 0, maximum do
         if not recent[p] and (not last or math.abs(p - last) >= MIN_PERCENT_GAP_FROM_LAST) then
             candidates[#candidates + 1] = p
         end
     end
     if #candidates == 0 then
-        for p = 0, MAX_START_PERCENT do if not recent[p] then candidates[#candidates+1] = p end end
+        for p = 0, maximum do if not recent[p] then candidates[#candidates+1] = p end end
     end
-    if #candidates == 0 then for p=0,MAX_START_PERCENT do candidates[#candidates+1]=p end end
+    if #candidates == 0 then for p=0,maximum do candidates[#candidates+1]=p end end
     return candidates
 end
 local function select_section(key, duration, history, planned_seconds)
     -- Compare equal-sized look-ahead windows so a late start is not favored just
     -- for having less remaining audio. Every allowed start has this much room.
-    local window = math.min(planned_seconds or options.preference_window_minutes * 60,
-        duration * (1 - MAX_START_PERCENT / 100))
-    local candidates, best, winners = eligible_percentages(history), math.huge, {}
+    local maximum = MAX_START_PERCENT
+    if planned_seconds then
+        maximum = math.min(maximum, math.max(0, math.floor((duration-math.min(planned_seconds,duration))/duration*100 + 0.000001)))
+    end
+    local window = planned_seconds and math.min(planned_seconds,duration) or
+        math.min(options.preference_window_minutes * 60, duration * (1-MAX_START_PERCENT/100))
+    local candidates, best, winners = eligible_percentages(history, maximum), math.huge, {}
     local now = os.time()
     for _, p in ipairs(candidates) do
         local first, score = duration * p / 100, 0
@@ -404,7 +484,7 @@ end
 local function finish_long()
     restore_fade(active_long)
     active_long = nil
-    save_sections()
+    if not options.managed then save_sections() end
 end
 local function begin_long(key, title, duration, start, planned_seconds)
     local speed = mp.get_property_number("speed", 1)
@@ -418,6 +498,7 @@ local function record_interval(c, first, last)
     if not item or math.abs(item.last - first) > 0.75 then
         item = {key=c.key, title=c.title, duration=c.duration, first=first, last=last}
         heard[#heard+1] = item
+        if options.managed then managed_pending[#managed_pending+1] = item end
         c.open = item
     end
     item.last = math.min(last, c.duration)
@@ -441,7 +522,7 @@ local function advance_section(c)
 end
 local function tick_sections()
     local c = active_long
-    if not c then return end
+    if not c or (options.managed and not managed_playing) then return end
     local now = mp.get_time()
     local pos = mp.get_property_number("time-pos")
     local speed = mp.get_property_number("speed", 1)
@@ -468,7 +549,7 @@ local function tick_sections()
             else c.open = nil end
         end
         c.previous = {time=now, pos=pos, speed=speed}
-        if c.limit then
+        if c.limit and not options.managed then
             local left = c.limit - c.elapsed
             if left <= 0.05 then advance_section(c); return end
             local fade_length = math.min(options.fade_seconds, c.limit)
@@ -480,10 +561,18 @@ local function tick_sections()
             end
         end
     end
-    if dirty and now - last_checkpoint >= options.checkpoint_seconds then save_sections() end
+    if not options.managed and dirty and now - last_checkpoint >= options.checkpoint_seconds then save_sections() end
 end
-mp.add_periodic_timer(0.5, tick_sections)
-mp.register_event("seek", function() restore_fade(active_long); break_interval(); save_sections() end)
+mp.add_periodic_timer(0.5, function()
+    if options.managed and mp.get_time() - last_controller_seen > 15 then
+        mp.msg.warn("Radio controller disconnected; stopping this managed player.")
+        mp.commandv("quit")
+        return
+    end
+    tick_sections(); publish_status()
+end)
+mp.register_script_message("radio-heartbeat", function() last_controller_seen = mp.get_time() end)
+mp.register_event("seek", function() restore_fade(active_long); break_interval(); if not options.managed then save_sections() end end)
 mp.register_event("playback-restart", break_interval)
 for _, property in ipairs({"pause", "paused-for-cache", "mute", "seeking"}) do
     mp.observe_property(property, "bool", function() break_interval() end)
@@ -497,7 +586,9 @@ load_persistent_track_history()
 local generation = 0
 local function invalidate_callbacks()
     generation = generation + 1
+    prepared, managed_playing = nil, false
     finish_long()
+    publish_status()
 end
 mp.register_event("start-file", invalidate_callbacks)
 mp.register_event("end-file", invalidate_callbacks)
@@ -517,7 +608,7 @@ mp.register_event("file-loaded", function()
     local playlist = mp.get_property_native("playlist", {}) or {}
     local blocked = blocked_track_keys(playlist)
 
-    if key and blocked[key] then
+    if not options.managed and key and blocked[key] then
         local target = next_nonrecent_index(playlist, blocked)
         if target ~= nil then
             mp.msg.info("Skipping recently played track: " .. title)
@@ -532,15 +623,14 @@ mp.register_event("file-loaded", function()
 
     -- Log accepted starts, not completed listens. Automatically filtered
     -- repeats are not logged. Short/long tracks and single-file playback are.
-    remember_track(key, title)
+    if not options.managed then remember_track(key, title) end
 
     mp.add_timeout(1, function()
         if generation ~= expected_generation then return end
 
         local duration = mp.get_property_number("duration")
-        if not duration or duration <= 0 then
-            return
-        end
+        prepared = {key=key, title=title}
+        if not duration or duration <= 0 then publish_status(); return end
 
         -- Short tracks play from the beginning.
         -- They still remain in recent-track history, but they do NOT
@@ -548,10 +638,10 @@ mp.register_event("file-loaded", function()
         if duration < MIN_RANDOM_START_DURATION then
             mp.msg.info(
                 string.format(
-                    "Full-track playback: %s (%d:%02d, under 20 min)",
+                    "Full-track playback: %s (%d:%02d, under %.0f min)",
                     title,
                     math.floor(duration / 60),
-                    math.floor(duration % 60)
+                    math.floor(duration % 60), options.min_duration_minutes
                 )
             )
             mp.osd_message("Short track: no random jump", 2)
@@ -567,9 +657,13 @@ mp.register_event("file-loaded", function()
             planned = math.random(math.max(1, math.floor(options.section_min_minutes * 60)),
                 math.max(1, math.floor(options.section_max_minutes * 60)))
         end
+        if options.managed then
+            heard = read_sections(SECTION_FILE) or read_sections(SECTION_FILE .. ".bak") or {}
+        end
         local percent_history = read_percent_history()
         local speed = mp.get_property_number("speed", 1)
         if not finite(speed) or speed <= 0 then speed = 1 end
+        if planned then planned = math.min(planned, duration / speed) end
         local percent, exposure = select_section(key, duration, percent_history, planned and planned * speed)
         local start = duration * percent / 100
         local ok, err = mp.commandv("seek", tostring(start), "absolute", "exact")
@@ -577,11 +671,46 @@ mp.register_event("file-loaded", function()
             mp.msg.warn("Section seek failed: " .. tostring(err))
             return
         end
-        save_percent_history(percent_history, percent)
+        if options.managed then prepared.percent = percent
+        else save_percent_history(percent_history, percent) end
         begin_long(key, title, duration, start, planned)
         local label = string.format("Fresh-section start: %d%% (%s)", percent, clock(start))
         if planned then label = label .. " | sample up to " .. clock(active_long.limit) end
         mp.osd_message(label, 4)
         mp.msg.info(string.format("%s: %s; weighted recent overlap %.3f", title, label, exposure))
     end)
+end)
+
+-- The controller sends these commands one deck at a time and waits for sequence
+-- acknowledgement. Preloading alone never counts as an accepted/heard track.
+mp.register_script_message("radio-activate", function()
+    if not options.managed or not prepared or managed_playing then return end
+    recent_tracks = {}
+    load_persistent_track_history()
+    remember_track(prepared.key, prepared.title)
+    if prepared.percent then save_percent_history(read_percent_history(), prepared.percent) end
+    managed_playing = true
+    break_interval()
+    command_sequence = command_sequence + 1
+    publish_status()
+end)
+mp.register_script_message("radio-checkpoint", function()
+    if not options.managed then return end
+    save_sections()
+    command_sequence = command_sequence + 1
+    publish_status()
+end)
+mp.register_script_message("radio-finish", function()
+    if not options.managed then return end
+    tick_sections()
+    finish_long()
+    save_sections()
+    prepared, managed_playing = nil, false
+    command_sequence = command_sequence + 1
+    publish_status()
+end)
+
+mp.register_script_message("radio-ping", function()
+    command_sequence = command_sequence + 1
+    publish_status()
 end)
