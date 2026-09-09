@@ -14,7 +14,7 @@ import time
 import wave
 
 root = Path(__file__).resolve().parents[1]
-powershell = shutil.which('pwsh') or shutil.which('powershell')
+powershell = (shutil.which('powershell') if os.name == 'nt' else shutil.which('pwsh'))
 mpv = shutil.which('mpv')
 assert powershell and mpv, 'PowerShell and MPV are required'
 
@@ -68,6 +68,8 @@ with tempfile.TemporaryDirectory(prefix='radio-crossfade-') as directory:
             '-Playlist', str(playlist), '-MpvFolder', str(work), '-MpvExecutable', mpv,
             '-DurationSeconds', '27'], stdout=output, stderr=subprocess.STDOUT)
     overlap = False
+    overlap_samples = 0
+    observed_gains = []
     positions = {}
     started = time.monotonic()
     try:
@@ -80,11 +82,15 @@ with tempfile.TemporaryDirectory(prefix='radio-crossfade-') as directory:
                     for endpoint in session['endpoints']:
                         status = json.loads(query(endpoint, 'user-data/radio-status'))
                         volume = query(endpoint, 'volume')
+                        status['position'] = query(endpoint, 'time-pos')
+                        status['paused'] = query(endpoint, 'pause')
                         old = positions.get(endpoint, -1)
                         decks.append((status, volume, old))
                         positions[endpoint] = status['position']
                     if all(s['playing'] and not s['paused'] and v > 5 and s['position'] > old for s, v, old in decks):
                         overlap = True
+                        overlap_samples += 1
+                        observed_gains.append([round(v, 1) for _, v, _ in decks])
                 except (OSError, ValueError, AssertionError):
                     pass  # Player can finish or atomically update between probe requests.
             time.sleep(0.15)
@@ -94,6 +100,7 @@ with tempfile.TemporaryDirectory(prefix='radio-crossfade-') as directory:
             process.kill()
             process.wait()
     print(log.read_text())
+    print('Overlap probes:', overlap_samples, 'gain pairs:', observed_gains[:16])
     assert code == 0, f'controller exit status {code}'
     assert overlap, 'Never observed two advancing, audible-gain streams simultaneously'
     rows = (config / 'recent-track-history.txt').read_text().splitlines()

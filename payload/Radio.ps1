@@ -30,7 +30,7 @@ function Open-MpvConnection([string]$Endpoint, [int]$Timeout = 2000) {
     $client = [pscustomobject]@{ Stream=$stream; Reader=[IO.StreamReader]::new($stream,$utf8); Writer=[IO.StreamWriter]::new($stream,$utf8); Request=0 }
     $client.Writer.AutoFlush = $true
     $client.Writer.NewLine = "`n"
-    $null = Invoke-Mpv $client @('disable_event','all')
+    try { $null = Invoke-Mpv $client @('disable_event','all') } catch { $stream.Dispose(); throw }
     return $client
 }
 function Close-MpvConnection($Client) {
@@ -99,7 +99,7 @@ function Start-RadioDeck([string]$Name, [string]$Executable, [string]$Folder, [s
             try { $client = Open-MpvConnection $endpoint 300; break } catch { $lastConnectionError=$_.Exception.Message; Start-Sleep -Milliseconds 100 }
         } while ($timer.Elapsed.TotalSeconds -lt 8)
         if ($null -eq $client) { throw "Could not connect to MPV deck $Name. $lastConnectionError" }
-        $deck = [pscustomobject]@{ Name=$Name; Process=$process; Endpoint=$endpoint; Client=$client; LoadingSince=0; Failures=0 }
+        $deck = [pscustomobject]@{ Name=$Name; Process=$process; Endpoint=$endpoint; Client=$client; LoadingSince=-1; Failures=0 }
         $timer.Restart()
         while (-not (Get-RadioStatus $deck)) {
             if ($timer.Elapsed.TotalSeconds -gt 3) { throw 'MPV did not load random-start.lua.' }
@@ -219,9 +219,8 @@ try {
     $recent.Add((Get-TrackKey $first))
     Set-DeckVolume $active $volume
     $null=Invoke-Mpv $active.Client @('set_property','pause',$false)
-    $next=Get-RadioChoice $tracks $bag $recent
-    Load-RadioTrack $spare $next
-    $spare.LoadingSince=$clock.Elapsed.TotalSeconds
+    $spare.LoadingSince=-1
+    $requestedSkip=$false
     $lastTick=$clock.Elapsed.TotalSeconds; $lastSave=$lastTick; $lastStatus=-10; $progressPosition=0; $stallSince=0
     Write-Host 'Radio started. Space = pause/resume, N = next, +/- = volume, Q = stop.'
     Write-Host 'Check Radio.cmd queries both running players to verify the Lua script and settings.'
@@ -229,7 +228,6 @@ try {
         $now=$clock.Elapsed.TotalSeconds; $dt=[Math]::Min(0.5,$now-$lastTick); $lastTick=$now
         $current=Get-RadioStatus $active; $incoming=Get-RadioStatus $spare
         if (-not $current) { throw 'The active MPV lost its radio script.' }
-        $skip=$false
         try {
             if ([Console]::KeyAvailable) {
                 $keyPressed=[Console]::ReadKey($true)
@@ -240,15 +238,23 @@ try {
                         $null=Invoke-Mpv $active.Client @('set_property','pause',$paused)
                         if ($fading) { $null=Invoke-Mpv $spare.Client @('set_property','pause',$paused) }
                     }
-                    'N' { $skip=$true }
+                    'N' { $requestedSkip=$true }
                 }
                 if ($keyPressed.KeyChar -eq '+') { $volume=[Math]::Min(100,$volume+5) }
                 if ($keyPressed.KeyChar -eq '-') { $volume=[Math]::Max(0,$volume-5) }
             }
         } catch [InvalidOperationException] { } # Scheduled/no-console session.
         if (-not $fading) { Set-DeckVolume $active $volume }
+        if (-not $fading -and $spare.LoadingSince -lt 0 -and ($requestedSkip -or $current.eof -or $current.remaining -le 60)) {
+            # Prepare near the handoff, using the latest heard sections and fresh URLs.
+            $null=Send-RadioCommand $active 'radio-checkpoint'
+            $next=Get-RadioChoice $tracks $bag $recent
+            Load-RadioTrack $spare $next
+            $spare.LoadingSince=$now
+            $incoming=Get-RadioStatus $spare
+        }
         $ready=$incoming -and $incoming.ready -and -not $incoming.seeking
-        if (-not $ready -and $now-$spare.LoadingSince -gt 60) {
+        if (-not $ready -and $spare.LoadingSince -ge 0 -and $now-$spare.LoadingSince -gt 60) {
             $spare.Failures++
             if ($spare.Failures -ge [Math]::Max(3,$tracks.Count)) { throw 'No next track could be loaded after repeated attempts.' }
             Write-Warning 'Next track failed to load; trying another playlist entry.'
@@ -257,22 +263,27 @@ try {
             $spare.LoadingSince=$now
         }
         $fadeSeconds=[double]$current.crossfade_seconds
-        if (-not $fading -and $ready -and -not $paused -and ($skip -or $current.eof -or ($current.remaining -ge 0 -and $current.remaining -le $fadeSeconds))) {
+        if (-not $fading -and $ready -and -not $paused -and ($requestedSkip -or $current.eof -or ($current.remaining -ge 0 -and $current.remaining -le $fadeSeconds))) {
             # Start the incoming decoder first. Outgoing gain stays up until it progresses.
             $null=Send-RadioCommand $spare 'radio-activate'
             $null=Invoke-Mpv $spare.Client @('set_property','pause',$false)
             $progressPosition=$incoming.position; $stallSince=$now
-            $fading=$true; $fadeElapsed=0
+            $fading=$true; $fadeElapsed=0; $requestedSkip=$false
             $spare.Failures=0
             $recent.Add((Get-TrackKey $incoming.path))
             while ($recent.Count -gt 10) { $recent.RemoveAt(0) }
             Write-Host ('Crossfade: ' + $current.title + ' -> ' + $incoming.title)
         }
         if ($fading -and -not $paused) {
-            if (-not $incoming.buffering -and -not $incoming.seeking -and $incoming.position -gt $progressPosition+0.001) {
-                $fadeElapsed+=$dt; $stallSince=$now
+            # Query the playback clock directly; Lua status is intentionally sampled.
+            $position=[double](Invoke-Mpv $spare.Client @('get_property','time-pos'))
+            $speed=[double](Invoke-Mpv $spare.Client @('get_property','speed'))
+            $progress=$position-$progressPosition
+            if (-not $incoming.buffering -and -not $incoming.seeking -and $progress -gt 0 -and $speed -gt 0) {
+                $fadeElapsed += [Math]::Min(0.5,$progress/$speed)
+                $stallSince=$now
             }
-            $progressPosition=$incoming.position
+            $progressPosition=$position
             # Finish a sample at its allowance even if the next source is slow.
             $fraction=1.0
             if ($fadeSeconds -gt 0) { $fraction=$fadeElapsed/$fadeSeconds }
@@ -286,9 +297,7 @@ try {
                 $null=Invoke-Mpv $active.Client @('set_property','pause',$true)
                 $old=$active; $active=$spare; $spare=$old
                 $fading=$false
-                $next=Get-RadioChoice $tracks $bag $recent
-                Load-RadioTrack $spare $next
-                $spare.LoadingSince=$now
+                $spare.LoadingSince=-1
                 $current=Get-RadioStatus $active
             }
         }
