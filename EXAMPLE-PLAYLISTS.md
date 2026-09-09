@@ -1,37 +1,63 @@
-# Optional playlist recommendation
+# Optional music playlists
 
-The installer does not prefill personal playlist URLs. Users can choose their own music, or deliberately copy an example below. Leaving a playlist prompt blank skips that task; it does not select an example automatically.
+Use either of these contributor-provided playlists, or choose your own. They are **recommendations, not hard-coded installer defaults**. Leaving a playlist prompt blank still skips that task; it does not select an example automatically.
+
+## Morning Music
+
+[Open the suggested Morning Music playlist](https://www.youtube.com/playlist?list=PLZAsCc2NQgn0)
+
+At the Morning task's **YouTube playlist URL** prompt, paste only this line and press Enter:
+
+```text
+https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
+```
+
+The installer suggests **06:45 (6:45 AM), Monday-Saturday, for three hours**. These are editable schedule suggestions, not requirements for this playlist.
 
 ## Day Finisher
 
-A project contributor has suggested this playlist for end-of-day listening:
+[Open the suggested Day Finisher playlist](https://www.youtube.com/playlist?list=PLBejJIaDgbyQ)
 
-[Open the suggested Day Finisher playlist](https://www.youtube.com/playlist?list=PLUAbAiT-jXUo)
-
-Paste this at the **Day-finisher YouTube playlist URL** prompt:
+At the Day-finisher task's **YouTube playlist URL** prompt, paste only this line and press Enter:
 
 ```text
-https://www.youtube.com/playlist?list=PLUAbAiT-jXUo
+https://www.youtube.com/playlist?list=PLBejJIaDgbyQ
 ```
 
-This is an external YouTube playlist, not music supplied with the project. Its contents and availability can change. This recommendation is contributor-provided; the project does not guarantee that every entry will play in every region or with every client.
+The installer suggests **15:45 (3:45 PM), Monday-Friday, for three hours**. Choose a different time, set of days, or runtime when needed.
 
-The optional schedule is still yours to choose. The setup helper suggests 15:45 (3:45 PM), Monday-Friday, with a maximum runtime of three hours; those values are editable and are not requirements for this playlist.
+## Using these links on an already configured computer
 
-## Privacy and account access
+Updating this repository does **not** change tasks already saved on your PC. There is no need to reinstall MPV or replace the Lua script just to change playlists.
 
-Publishing a playlist link can associate this project with the playlist owner's publicly visible YouTube channel/profile. It is not an anonymous publishing method.
+1. Open Windows Task Scheduler and open the existing morning music task's **Properties**.
+2. On **Actions**, select the action that starts `C:\MPV\mpv.exe` and click **Edit**. In the standard setup, this is the second action. Leave the first stop-old-MPV action unchanged.
+3. Replace **Add arguments** with the Morning Music line below. Keep **Program/script** as `C:\MPV\mpv.exe` and **Start in** as `C:\MPV`.
+4. Save, then repeat for the Day Finisher task using its corresponding line. Keep your chosen triggers, days, output device and runtime limits unchanged.
+5. The replacement URL is used on the next task start. To test immediately, right-click the task and choose **Run**; the task will stop the currently accessible MPV playback first.
 
-A normal playlist URL is not a Google sign-in credential or authorization token. This project's setup helper does not ask for Google credentials, authenticate as the playlist owner, or request access to their Gmail, private playlists, or account management. No browser cookies or Google tokens are distributed with this project.
+**Morning Music - Add arguments:**
 
-YouTube says that public playlists can be viewed/shared by anyone, and unlisted playlists can be viewed/shared by anyone with the link. Publishing an unlisted link in a public repository makes it available to repository visitors. See [YouTube's playlist privacy documentation](https://support.google.com/youtube/answer/3127309?hl=en).
+```text
+--shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0"
+```
 
-The example URL retains the playlist ID only; the supplied `si=` sharing parameter is omitted. That does not anonymize the playlist or its owner. Do not publish private account details or authentication files in this repository.
+**Day Finisher - Add arguments:**
 
-Using a dedicated project channel for future example playlists is an option for separating personal and project identity. Playlist links can be changed in the documentation later, but old public commits may retain earlier links.
+```text
+--shuffle --loop-playlist=inf "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ"
+```
 
-## Your own playlists
+For a fresh installation, paste **only the URL**, not the `--shuffle` command, at the installer prompt. The installer supplies the command-line options automatically.
 
-Copy your playlist's link from YouTube and paste it into the installer. The helper accepts a regular YouTube link containing `list=` and normalizes it to a playlist URL. This validates the input format, not account access or playback availability.
+## Availability and privacy
 
-See [README.md](README.md) for installation and all prompt examples. Links are listening suggestions, not a grant of rights for public or commercial playback; see [THIRD_PARTY.md](THIRD_PARTY.md).
+These are external YouTube playlists, not music distributed with this project. Their contents and availability can change. The project does not guarantee playback of every entry in every region or client. URL-format validation in the installer does not check that a playlist exists or is playable.
+
+The example URLs retain the supplied playlist IDs and omit `si=` sharing parameters. This does not anonymize a playlist or its publicly visible owner/channel. Public playlists can be viewed/shared by anyone; unlisted playlists can be viewed/shared by anyone with the link. Publishing an unlisted link here makes it available to repository visitors. See [YouTube's playlist privacy documentation](https://support.google.com/youtube/answer/3127309?hl=en).
+
+A playlist link is not a Google sign-in credential. This setup does not authenticate as the playlist owner or distribute Google credentials, browser cookies or account tokens. Keep authentication files and private account details out of this repository.
+
+Replacing a link in the current documentation does not remove earlier versions from Git history or copies already downloaded. These instructions change only the URLs used for future setup or task launches; they do not erase old history.
+
+See [README.md](README.md) for installation, input examples and playback behavior. Recommendations are not a grant of rights for public or commercial playback; see [THIRD_PARTY.md](THIRD_PARTY.md).
