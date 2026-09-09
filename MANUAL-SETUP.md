@@ -16,16 +16,20 @@ Get `yt-dlp.exe` from the [official yt-dlp releases](https://github.com/yt-dlp/y
 
 Download `SHA2-256SUMS` from that **same release**. In PowerShell run `Get-FileHash -LiteralPath 'C:\MPV\yt-dlp.exe' -Algorithm SHA256` and compare the displayed hash with the entry named exactly `yt-dlp.exe`. They must match (hexadecimal letter case does not matter). Do not run a download whose checksum is missing or mismatched. The guided installer performs this comparison automatically only when downloading a missing yt-dlp; manual setup does not run that installer check. A checksum match is an integrity check against the published list, not a malware scan or signature verification.
 
-For this project's default YouTube setup, use **stable Deno 2.3.0 or newer**: download `deno-x86_64-pc-windows-msvc.zip` from the [official Deno releases](https://github.com/denoland/deno/releases/latest), extract it, and put `deno.exe` directly in `C:\MPV`. Do not select `denort`. Verify with `C:\MPV\deno.exe --version`. Follow [upstream JavaScript-runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS); Deno is separate and is not downloaded by our installer. The portable location avoids different-user PATH issues. Custom alternative runtimes require their own yt-dlp configuration and are not validated by our guided setup. Keep security protection enabled.
+**Deno is recommended, not required by our installer.** It runs JavaScript that helps yt-dlp obtain YouTube stream information. Some streams work without it; adding it may help with JavaScript/signature extraction errors or missing formats. Guided setup continues when Deno is absent, old, incompatible, or blocked, and does not download it. Checksum verification for newly downloaded yt-dlp remains mandatory. See the [optional Deno explanation and compatibility guide](README.md#optional-recommendation-deno).
 
-Minimum layout:
+If you choose to add Deno, check **Settings -> System -> About -> System type**. For **64-bit Windows with an x64-based Intel/AMD processor**, choose exactly **`deno-x86_64-pc-windows-msvc.zip`** from the [official Deno releases](https://github.com/denoland/deno/releases/latest). ARM64 uses `deno-aarch64-pc-windows-msvc.zip`, but this radio toolkit is tested for Windows x64 only. There is no current official 32-bit Windows Deno build. Deno's documented desktop minimum is Windows 10 version 1709 or newer, including Windows 11; choose a stable Deno version at least 2.3.0 for yt-dlp.
+
+Select the full `deno-...zip`: `.bsdiff` files are patches, `.sha256sum` files are checksum text, and `denort`, `libdenort` and source archives are not the needed CLI download. Extract `deno.exe` directly into `C:\MPV` and check it with `C:\MPV\deno.exe --version`. Restart MPV; no task or history reset is needed. Keep security protection enabled. Full details and upstream references are in the README guide linked above.
+
+Folder layout (`deno.exe` is optional):
 
 ```text
 C:\MPV\
     mpv.exe
     mpv.com
     yt-dlp.exe
-    deno.exe
+    deno.exe          (optional recommendation)
     Radio.ps1
     Radio-Hidden.cs
     Build-HiddenStarter.ps1

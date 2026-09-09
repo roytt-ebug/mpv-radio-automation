@@ -1,4 +1,4 @@
-# MPV Radio Automation setup helper, guided setup revision 7.
+# MPV Radio Automation setup helper, guided setup revision 8.
 # Requires Windows PowerShell 5.1. MPV must already be installed in C:\MPV.
 # -FunctionsOnly is for offline parser tests; it does not run installation.
 param(
@@ -196,7 +196,7 @@ function ConvertFrom-DenoVersion([string]$Output) {
         throw 'Deno returned an unrecognized version. Use an official stable deno.exe.'
     }
     $version = [version]$Matches.version
-    if ($version -lt [version]'2.3.0') { throw "Deno $version is too old; YouTube requires Deno 2.3.0 or newer." }
+    if ($version -lt [version]'2.3.0') { throw "Deno $version is too old for yt-dlp's Deno support; use stable Deno 2.3.0 or newer if you choose to add it." }
     return $version
 }
 
@@ -229,7 +229,7 @@ function Get-DenoVersion([string]$Executable, [string]$WorkingDirectory, [int]$T
 }
 
 function Get-YouTubeRuntime([string]$MpvFolder, [string]$SearchPath = $env:PATH, [string]$PathExtensions = $env:PATHEXT) {
-    $help = "Download the official Windows x64 Deno ZIP from https://github.com/denoland/deno/releases/latest, extract deno.exe (not denort.exe) into $MpvFolder beside yt-dlp.exe, then rerun INSTALL.cmd. No runtime is installed automatically. Do not disable security protection."
+    $help = "Optional download: https://github.com/denoland/deno/releases/latest. Choose the matching Windows ZIP described below or in README.md, then extract deno.exe beside yt-dlp.exe in $MpvFolder and restart MPV. No runtime is installed automatically. Do not disable security protection."
     # Match the portable yt-dlp Windows search order: binary folder, working
     # folder (also MpvFolder for our tasks), then PATH, respecting PATHEXT.
     $extensions = @('.COM','.EXE','.BAT','.CMD')
@@ -250,7 +250,30 @@ function Get-YouTubeRuntime([string]$MpvFolder, [string]$SearchPath = $env:PATH,
             } catch { throw ($_.Exception.Message + "`n" + $help) }
         }
     }
-    throw ("No supported Deno runtime was found for this installation. Node/QuickJS alone are not accepted: yt-dlp does not enable them by default.`n" + $help)
+    throw ("No supported Deno runtime was found. Custom Node/QuickJS configurations are not checked or changed.`n" + $help)
+}
+
+function Show-YouTubeRuntimeRecommendation([string]$MpvFolder, [string]$SearchPath = $env:PATH, [string]$PathExtensions = $env:PATHEXT) {
+    Write-Host "`nDeno is RECOMMENDED, not required by this installer."
+    Write-Host 'It helps yt-dlp solve YouTube JavaScript challenges for fuller stream/format support.'
+    Write-Host 'Some playlists already play without it. Consider adding it if YouTube extraction or formats fail.'
+    try {
+        $runtime = Get-YouTubeRuntime $MpvFolder $SearchPath $PathExtensions
+        Write-Host ("Optional runtime found: Deno $($runtime.Version) at $($runtime.Path)") -ForegroundColor Green
+        return $runtime
+    } catch {
+        # Runtime advice must never turn into a prerequisite. Download checksum
+        # failures are handled separately and still stop installation.
+        Write-Host 'Setup will CONTINUE without a confirmed Deno runtime.' -ForegroundColor Yellow
+        Write-Host $_.Exception.Message -ForegroundColor Yellow
+        Write-Host 'Check Settings > System > About > System type (both Windows bitness and processor).'
+        Write-Host '64-bit Windows + x64-based processor (Intel/AMD): deno-x86_64-pc-windows-msvc.zip'
+        Write-Host '64-bit Windows + ARM-based processor: deno-aarch64-pc-windows-msvc.zip'
+        Write-Host 'The ARM download is for Deno; this radio toolkit is tested for Windows x64 only.'
+        Write-Host 'Deno needs Windows 10 version 1709 or newer (including Windows 11); no official 32-bit build.'
+        Write-Host 'Choose the full deno-...zip, not .bsdiff patches, .sha256sum files, denort/libdenort, or source code.'
+        return $null
+    }
 }
 
 function Get-YtDlpChecksum([string]$Text) {
@@ -325,7 +348,7 @@ try {
     }
     $sid = New-Object Security.Principal.SecurityIdentifier($TaskUserSid)
     $taskUser = $sid.Translate([Security.Principal.NTAccount]).Value
-    Write-Host "`nMPV Radio Automation - guided setup (revision 7)" -ForegroundColor Cyan
+    Write-Host "`nMPV Radio Automation - guided setup (revision 8)" -ForegroundColor Cyan
     Write-Host 'Type only your answer, then press Enter. Do not type the prompt or [brackets].'
     Write-Host 'Press Enter to accept a displayed default. Type Q at any input prompt to cancel.'
     Write-Host ("Computer time now: " + (Get-Date).ToString('yyyy-MM-dd HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture))
@@ -337,15 +360,14 @@ try {
             throw "Missing $InstallDir\$exe. Install MPV yourself first, then rerun INSTALL.cmd."
         }
     }
-    $stage = 'checking the YouTube JavaScript runtime'
+    $stage = 'checking the optional YouTube JavaScript runtime'
     $runtimeSearchPath = $env:PATH
     if ($identity.User.Value -ne $TaskUserSid) {
         # A different UAC administrator's PATH is not the listener's PATH.
         $runtimeSearchPath = ''
         Write-Host 'Setup is elevated as a different account; checking portable Deno in C:\MPV, not the administrator''s PATH.'
     }
-    $youtubeRuntime = Get-YouTubeRuntime -MpvFolder $InstallDir -SearchPath $runtimeSearchPath
-    Write-Host ("YouTube runtime: Deno $($youtubeRuntime.Version) at $($youtubeRuntime.Path)") -ForegroundColor Green
+    $youtubeRuntime = Show-YouTubeRuntimeRecommendation -MpvFolder $InstallDir -SearchPath $runtimeSearchPath
     $payloadFiles = @('Radio-Hidden.cs','Build-HiddenStarter.ps1','Radio.ps1','Play-YouTube.ps1','Check-Radio.ps1','Check Radio.cmd','Stop Radio.cmd','portable_config\script-opts\random-start.conf','portable_config\scripts\random-start.lua','Play YouTube on MPV Audio.cmd','Play YouTube Video - 720p Best Audio Always On Top.cmd','Update yt-dlp.cmd','README-LOCAL.txt')
     foreach ($relative in $payloadFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $PayloadDir $relative) -PathType Leaf)) {

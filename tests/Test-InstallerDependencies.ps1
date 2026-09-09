@@ -53,22 +53,31 @@ public class DenoFixture {
     Assert-Equal $result.Version '2.3.0' 'actual version process'
     Assert-Rejected { Get-YouTubeRuntime $mpvFolder '' '.EXE' } 'No supported Deno' 'different account does not use administrator PATH'
     Assert-Rejected { Get-YouTubeRuntime $mpvFolder $downloadFolder '.EXE' } 'No supported Deno' 'missing runtime'
+    Assert-Equal ($null -eq (Show-YouTubeRuntimeRecommendation $mpvFolder '' '.EXE')) $true 'installer continues without Deno'
     Copy-Item -LiteralPath $fixture -Destination (Join-Path $mpvFolder 'deno.exe')
     $localMode = Join-Path $mpvFolder 'mode.txt'
     [IO.File]::WriteAllText($localMode, 'good')
     $result = Get-YouTubeRuntime $mpvFolder $pathFolder '.EXE'
     Assert-Equal $result.Path (Join-Path $mpvFolder 'deno.exe') 'portable runtime takes precedence'
     Assert-Equal (Get-YouTubeRuntime $mpvFolder '' '.EXE').Version '2.3.0' 'portable runtime works without user PATH'
+    Assert-Equal (Show-YouTubeRuntimeRecommendation $mpvFolder '' '.EXE').Version '2.3.0' 'advisory check reports available runtime'
     [IO.File]::WriteAllText($localMode, 'old')
     Assert-Rejected { Get-YouTubeRuntime $mpvFolder $pathFolder '.EXE' } 'too old' 'old portable runtime must not fall through to newer PATH'
+    Assert-Equal ($null -eq (Show-YouTubeRuntimeRecommendation $mpvFolder '' '.EXE')) $true 'installer continues with old Deno'
     [IO.File]::WriteAllText($localMode, 'fail')
-    Assert-Rejected { Get-YouTubeRuntime $mpvFolder $pathFolder '.EXE' } 'exit 12' 'version failure stops setup'
+    Assert-Rejected { Get-YouTubeRuntime $mpvFolder $pathFolder '.EXE' } 'exit 12' 'version failure is detected'
+    Assert-Equal ($null -eq (Show-YouTubeRuntimeRecommendation $mpvFolder '' '.EXE')) $true 'installer continues after runtime failure'
     [IO.File]::WriteAllText($localMode, 'stderr')
     Assert-Equal (Get-YouTubeRuntime $mpvFolder '' '.EXE').Version '2.3.0' 'stderr drained without deadlock'
     [IO.File]::WriteAllText($localMode, 'hang')
     Assert-Rejected { Get-DenoVersion (Join-Path $mpvFolder 'deno.exe') $mpvFolder 250 } 'timed out' 'runtime timeout'
+    Assert-Equal ($null -eq (Show-YouTubeRuntimeRecommendation $mpvFolder '' '.EXE')) $true 'installer continues after runtime timeout'
     [IO.File]::WriteAllText((Join-Path $mpvFolder 'deno.cmd'), '@exit /b 0')
     Assert-Rejected { Get-YouTubeRuntime $mpvFolder $pathFolder '.CMD;.EXE' } 'command wrappers' 'respect executable shadowing'
+    Assert-Equal ($null -eq (Show-YouTubeRuntimeRecommendation $mpvFolder $pathFolder '.CMD;.EXE')) $true 'installer continues with unsupported runtime wrapper'
+    Remove-Item -LiteralPath (Join-Path $mpvFolder 'deno.exe')
+    [IO.File]::WriteAllText((Join-Path $mpvFolder 'deno.exe'), 'not a Windows executable')
+    Assert-Equal ($null -eq (Show-YouTubeRuntimeRecommendation $mpvFolder '' '.EXE')) $true 'installer continues with incompatible runtime binary'
 
     $script:bytes = [byte[]]((0..255) * 8)
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -155,7 +164,10 @@ public class DenoFixture {
     # These tests do not run the interactive installer; guard preflight order
     # and account handling so no player is stopped before dependency validation.
     $source = [IO.File]::ReadAllText((Join-Path (Split-Path -Parent $PSScriptRoot) 'Install.ps1'))
-    Assert-Equal ($source.IndexOf('$youtubeRuntime = Get-YouTubeRuntime') -lt $source.IndexOf("`$stage = 'stopping this installation radio")) $true 'preflight before mutations'
+    $advisoryCall = $source.IndexOf('$youtubeRuntime = Show-YouTubeRuntimeRecommendation')
+    Assert-Equal ($advisoryCall -ge 0 -and $advisoryCall -lt $source.IndexOf("`$stage = 'stopping this installation radio")) $true 'advisory preflight before mutations'
+    Assert-Equal ($source -match '\$youtubeRuntime = Get-YouTubeRuntime') $false 'installer does not call the strict runtime probe directly'
+    Assert-Equal $source.Contains('Setup will CONTINUE without a confirmed Deno runtime.') $true 'clear continuation message'
     Assert-Equal ($source -match '\$identity.User.Value -ne \$TaskUserSid') $true 'different UAC user guarded'
     Assert-Equal ($source -match "\`$runtimeSearchPath = ''") $true 'different UAC user excludes administrator PATH'
     Write-Host "Passed $script:checks dependency and checksum checks. No real downloads or tasks." -ForegroundColor Green

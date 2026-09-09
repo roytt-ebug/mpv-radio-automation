@@ -35,15 +35,38 @@ A 15-minute recording cannot supply a 30-minute sample. Its allowance is capped 
 5. Enter schedules using the examples below, review the summary, and type **YES** to save. Existing matching files/tasks are backed up first; playback histories are retained. Missing yt-dlp is downloaded from upstream only after approval and accepted only after its SHA-256 checksum matches that same release.
 6. In Task Scheduler, right-click a configured task and choose **Run**. Check the speaker, playlist, and repeat behavior before waiting for the next scheduled start.
 
-The guided installer is **revision 7**. It builds the small `Radio-Hidden.exe` starter from included source using Windows' existing .NET Framework, then creates one starter action per radio task. No extra download or developer tools are needed to build the starter. PowerShell still supervises the same single MPV player, without a console window. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
+The guided installer is **revision 8**. It builds the small `Radio-Hidden.exe` starter from included source using Windows' existing .NET Framework, then creates one starter action per radio task. No extra download or developer tools are needed to build the starter. PowerShell still supervises the same single MPV player, without a console window. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
 
-### YouTube prerequisite: Deno
+### Optional recommendation: Deno
 
-Before running setup, make **stable Deno 2.3.0 or newer** available. The simplest portable setup is to download `deno-x86_64-pc-windows-msvc.zip` from the [official Deno releases](https://github.com/denoland/deno/releases/latest), extract it, and put **`deno.exe` directly in `C:\MPV`**, beside `yt-dlp.exe` (or where setup will install yt-dlp). Do not select `denort`, ARM, Linux, or macOS builds for this Windows x64 setup. Deno is a command-line dependency, not a second player or an added background service. See [yt-dlp's runtime requirements](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+Deno runs JavaScript code that yt-dlp uses to solve YouTube challenges and obtain playable stream information. **It is recommended for fuller YouTube support, but it is not a requirement of this installer.** Some streams can play without it; if your playlists already work, you may continue without installing it. Consider adding it if yt-dlp reports JavaScript/signature extraction problems or missing formats. It cannot fix every network, account, regional, or YouTube error. See [yt-dlp's explanation](https://github.com/yt-dlp/yt-dlp/issues/14404) and [current runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
 
-Setup checks Deno's actual version before stopping music or replacing project files/tasks. It also accepts Deno on the current account's PATH when setup and the scheduled listener use the same Windows account. If UAC uses a different administrator, use the portable `C:\MPV\deno.exe`; the administrator's PATH is not proof that the listening account can find Deno. After changing PATH, sign out and back in before testing scheduled playback, or use the portable location.
+**Setup continues if Deno is missing, outdated, blocked, incompatible, or unresponsive.** It displays a recommendation and does not add a confirmation question, download Deno, or change playback/history settings. The separate SHA-256 verification for newly downloaded yt-dlp remains mandatory.
 
-Missing, outdated, blocked, or unresponsive Deno stops setup with instructions. It is **not downloaded automatically**. This preflight targets Deno, the runtime yt-dlp enables by default; it does not enable or validate custom Node/QuickJS configurations, and does not modify existing yt-dlp settings. Finding Deno does not prove that custom settings, YouTube access, or the physical speaker will work: run the configured task as the listener to verify playback. Do not disable security protection if execution is blocked.
+#### Choose a compatible Deno download
+
+1. In Windows open **Settings -> System -> About**. Under **Device specifications**, read **System type**, including both the operating-system bitness and processor type. Do not infer this from the browser or from "64-bit" alone. [Microsoft's instructions](https://support.microsoft.com/en-us/windows/experience/compatibility/32-bit-and-64-bit-windows-frequently-asked-questions)
+2. Under **Windows specifications**, check the version. Deno documents Windows 10 version **1709 or newer**, including Windows 11, as its desktop minimum. Use a **stable Deno release 2.3.0 or newer** for yt-dlp. [Deno installation requirements](https://docs.deno.com/runtime/getting_started/installation/)
+3. Open the [official Deno release assets](https://github.com/denoland/deno/releases/latest) and match the exact filename below. Expand **Show all assets** if necessary.
+
+| Windows System type | Deno ZIP to choose |
+| --- | --- |
+| **64-bit operating system, x64-based processor** (Intel or AMD) | **`deno-x86_64-pc-windows-msvc.zip`** |
+| **64-bit operating system, ARM-based processor** (ARM64, for example Snapdragon) | `deno-aarch64-pc-windows-msvc.zip` |
+| **32-bit operating system** | No official current Windows 32-bit Deno download. Do not choose a 64-bit ZIP. |
+
+`x86_64` means the x64/AMD64 family and works with compatible **Intel and AMD** processors. `aarch64` means ARM64; `pc-windows-msvc` identifies a Windows build. These are Deno download mappings: this radio toolkit's guided setup and tests currently target **Windows x64**. An ARM64 Deno asset does not establish that the whole radio toolkit is tested on ARM. The current toolkit does not support 32-bit Windows.
+
+Choose the complete **`deno-...zip`** archive. The other asset names have different purposes:
+
+- `apple-darwin` = macOS; `unknown-linux-gnu` = Linux.
+- `.from-...bsdiff` = an incremental update patch, not the complete program.
+- `.sha256sum` = checksum text, not the program. To verify a ZIP, use the matching **`.zip.sha256sum`** from the same release.
+- `denort`, `libdenort`, `.d.ts`, `deno_src.tar.gz`, and **Source code** = runtime/development/source files; they are not the Deno CLI archive needed here.
+
+Extract the chosen ZIP and put **`deno.exe` directly in `C:\MPV`**, beside `yt-dlp.exe` (or where setup will install it). It must not remain inside the ZIP or an extra nested folder. In Command Prompt or PowerShell, run `C:\MPV\deno.exe --version` and check that it reports a stable version at least 2.3.0. Restart MPV after adding Deno; no reinstall or task/history reset is needed. No Visual Studio or additional music player is needed for the ready-made executable.
+
+The advisory check also accepts Deno on the current account's PATH when setup and the scheduled listener use the same Windows account. If UAC uses a different administrator, it checks the portable location only; that administrator's PATH does not prove availability for the listener. If you change PATH, sign out and back in before testing scheduled playback, or use the portable location. Custom Node/QuickJS settings are not validated or changed. Test the configured task as the listener; a successful Deno version check does not verify YouTube access or the speaker. Do not disable security protection if execution is blocked.
 
 ### Exactly what to type
 
