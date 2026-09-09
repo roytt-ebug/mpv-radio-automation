@@ -24,6 +24,10 @@ foreach ($count in @(1,2,4,20)) {
         $previous=$next
     }
 }
+$quarter=Get-FadeGains 0.25 80
+Assert ([math]::Abs($quarter[0]-60) -lt 0.001 -and [math]::Abs($quarter[1]-20) -lt 0.001) 'Quarter fade must produce intermediate gains, not an integer step'
+$half=Get-FadeGains 0.5 80
+Assert ($half[0] -eq 40 -and $half[1] -eq 40) 'Midpoint must overlap at half gain'
 foreach ($p in @(-1,0,0.25,0.5,0.75,1,2)) {
     $gains=Get-FadeGains $p 80
     Assert ([math]::Abs($gains[0]+$gains[1]-80) -lt 0.001) 'Crossfade combined gain exceeded master volume'

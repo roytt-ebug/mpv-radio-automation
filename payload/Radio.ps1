@@ -166,7 +166,7 @@ function Wait-RadioReady($Deck, $Decks, [double]$Timeout=60) {
 }
 function Set-DeckVolume($Deck, [double]$Value) { $null=Invoke-Mpv $Deck.Client @('set_property','volume',$Value) }
 function Get-FadeGains([double]$Fraction, [double]$Volume) {
-    $p=[Math]::Min(1,[Math]::Max(0,$Fraction))
+    $p=[Math]::Min(1.0,[Math]::Max(0.0,$Fraction))
     return @(($Volume*(1-$p)), ($Volume*$p))
 }
 if ($FunctionsOnly) { return }
