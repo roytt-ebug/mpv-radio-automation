@@ -4,12 +4,14 @@
 param(
     [string]$Playlist,
     [ValidateRange(1,86400)][double]$DurationSeconds = 10800,
-    [string]$MpvFolder = $PSScriptRoot,
+    [string]$MpvFolder = '',
     [string]$MpvExecutable,
     [switch]$Stop,
     [switch]$FunctionsOnly
 )
 $ErrorActionPreference = 'Stop'
+# Resolve script location after parameter binding (also on Windows PowerShell 5.1).
+if (-not $MpvFolder) { $MpvFolder = $PSScriptRoot }
 
 function Join-NativeArguments([string[]]$Values) {
     return (($Values | ForEach-Object {

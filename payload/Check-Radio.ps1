@@ -1,5 +1,7 @@
-param([string]$MpvFolder=$PSScriptRoot)
+param([string]$MpvFolder='')
 $ErrorActionPreference = 'Stop'
+# Resolve script location after parameter binding (also on Windows PowerShell 5.1).
+if (-not $MpvFolder) { $MpvFolder = $PSScriptRoot }
 . (Join-Path $PSScriptRoot 'Radio.ps1') -MpvFolder $MpvFolder -FunctionsOnly
 try {
     $endpoint = 'mpv-radio-' + (Get-RadioKey $MpvFolder)
