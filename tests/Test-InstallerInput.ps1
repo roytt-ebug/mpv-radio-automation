@@ -61,6 +61,21 @@ foreach ($url in @(
 foreach ($bad in @('not a url','https://youtube.com/watch?v=TEST','https://youtube.com.evil.test/playlist?list=x','file:///C:/test','https://user@youtube.com/playlist?list=x','https://youtube.com/playlist?list=x" --evil','https://youtube.com:444/playlist?list=x')) {
     Assert-Rejected { ConvertTo-YouTubePlaylist $bad } ('bad URL ' + $bad)
 }
+# Approved samples must select the right playlist, not silently change Enter=skip.
+$morningSample = 'https://www.youtube.com/playlist?list=PLZAsCc2NQgn0'
+$finisherSample = 'https://www.youtube.com/playlist?list=PLBejJIaDgbyQ'
+Assert-Equal (Get-SamplePlaylist 'Music - Morning') $morningSample 'morning sample mapping'
+Assert-Equal (Get-SamplePlaylist 'Music - Day Finisher') $finisherSample 'finisher sample mapping'
+Assert-Equal (Get-SamplePlaylist 'Other task') '' 'unknown task has no sample'
+foreach ($sample in @($morningSample,$finisherSample)) {
+    foreach ($choice in @('S','s','sample',' SAMPLE ')) {
+        Assert-Equal (Resolve-PlaylistInput $choice $sample) $sample ('sample choice ' + $choice)
+    }
+    Assert-Equal (Resolve-PlaylistInput '' $sample) '' 'Enter skips even with a sample'
+    Assert-Equal (Resolve-PlaylistInput 'https://youtube.com/playlist?list=PL_CUSTOM&si=x' $sample) 'https://www.youtube.com/playlist?list=PL_CUSTOM' 'custom URL overrides sample'
+    Assert-Rejected { Resolve-PlaylistInput 'https://example.com/playlist?list=x' $sample } 'sample option does not bypass URL validation'
+}
+Assert-Rejected { Resolve-PlaylistInput 'S' '' } 'S requires an available sample'
 $guid = '11111111-2222-3333-4444-555555555555'
 $lines = @('List of detected audio devices:', " 'auto' (Autoselect device)", " 'wasapi/{$guid}' (Speakers (Example USB))", " 'openal' (Default (openal))")
 $devices = @(ConvertFrom-MpvDevices $lines)
@@ -86,9 +101,41 @@ try {
     Assert-Equal $value.ToString('HH:mm') '06:45' 'Enter accepts default'
     $script:answers.Enqueue('')
     Assert-Equal ($null -eq (Read-MusicSession 'Test' '06:45' '2')) $true 'blank playlist skips all later prompts'
+    $script:answers.Enqueue('')
+    Assert-Equal ($null -eq (Read-MusicSession 'Music - Morning' '06:45' '2')) $true 'morning sample not selected on blank'
+    $script:answers.Enqueue('')
+    Assert-Equal ($null -eq (Read-MusicSession 'Music - Day Finisher' '15:45' '1')) $true 'finisher sample not selected on blank'
+    foreach ($answer in @('S','','','')) { $script:answers.Enqueue($answer) }
+    $session = Read-MusicSession 'Music - Morning' '06:45' '2'
+    Assert-Equal $session.Playlist $morningSample 'morning S end to end'
+    Assert-Equal $session.At.ToString('HH:mm') '06:45' 'morning time unchanged'
+    Assert-Equal $session.Days.Count 6 'morning days unchanged'
+    Assert-Equal $session.Runtime.TotalMinutes 180 'morning runtime unchanged'
+    foreach ($answer in @('s','1708','2','45 min')) { $script:answers.Enqueue($answer) }
+    $session = Read-MusicSession 'Music - Day Finisher' '15:45' '1'
+    Assert-Equal $session.Playlist $finisherSample 'finisher s end to end'
+    Assert-Equal $session.At.ToString('HH:mm') '17:08' 'custom time with sample'
+    Assert-Equal $session.Days.Count 6 'custom days with sample'
+    Assert-Equal $session.Runtime.TotalMinutes 45 'custom runtime with sample'
+    foreach ($answer in @('bad','https://youtube.com/playlist?list=PL_CUSTOM&si=x','','','1:30')) { $script:answers.Enqueue($answer) }
+    $session = Read-MusicSession 'Music - Day Finisher' '15:45' '1'
+    Assert-Equal $session.Playlist 'https://www.youtube.com/playlist?list=PL_CUSTOM' 'retry then custom playlist'
+    Assert-Equal $session.Runtime.TotalMinutes 90 'runtime format still accepted'
+    Assert-Equal $script:answers.Count 0 'no extra prompts consumed'
     $script:answers.Enqueue('Q')
     Assert-Rejected { Read-Validated 'Time' '06:45' { param($v) ConvertTo-ClockTime $v } } 'Q cancels'
 } finally { Remove-Item Function:\Read-Host }
+# Keep the complete copy/paste Lua block identical to the shipped source.
+$manual = [IO.File]::ReadAllText((Join-Path $root 'MANUAL-SETUP.md')).Replace("`r`n", "`n")
+$lua = [IO.File]::ReadAllText((Join-Path $root 'payload\portable_config\scripts\random-start.lua')).Replace("`r`n", "`n")
+$code = [regex]::Match($manual, '(?s)<!-- BEGIN RADIO LUA -->\n```lua\n(?<code>.*?)\n```\n<!-- END RADIO LUA -->')
+Assert-Equal $code.Success $true 'manual contains a complete marked Lua block'
+Assert-Equal $code.Groups['code'].Value.TrimEnd([char[]]"`r`n") $lua.TrimEnd([char[]]"`r`n") 'manual Lua is identical to payload'
+$installerText = [IO.File]::ReadAllText($installer)
+$runtimeWording = 'Maximum runtime is a DURATION, not the time of day to stop.'
+Assert-Equal $installerText.Contains($runtimeWording) $true 'precise installer duration wording'
+Assert-Equal $manual.Contains($runtimeWording) $true 'manual duration wording'
+Assert-Equal ([IO.File]::ReadAllText((Join-Path $root 'README.md'))).Contains('MANUAL-SETUP.md') $true 'README links manual option'
 # Build a real Windows task definition without registering or running a task.
 if ($env:OS -eq 'Windows_NT') {
     Import-Module ScheduledTasks
