@@ -1,99 +1,106 @@
 # MPV Radio Automation for Windows
 
-**Scheduled YouTube background music, using one MPV player.**
+**Scheduled YouTube music, with variety across songs and long mixes.**
 
-Choose a playlist, speaker and schedule. Ordinary songs play normally; long mixes start in a less recently heard section and rotate after a limited listening period. The project adds a small Windows launcher and a Lua script to separately installed **mpv + yt-dlp**.
+Choose your playlists, speaker, and schedule. The player shuffles ordinary songs and plays them normally. For long recordings, it remembers which sections played, chooses a less recently heard starting area, and optionally moves to another recording after a sample.
 
-## What it does
+The project uses **one MPV player**, yt-dlp for YouTube playback, and Windows Task Scheduler. MPV's playback controls stay visible while its PowerShell supervisor runs without a terminal window.
 
-- Starts morning/day-finisher playlists using Windows Task Scheduler and your selected audio output.
-- Uses MPV's playlist shuffle, with an adaptive recent-track filter that keeps small playlists playable.
-- Retains the last **10 accepted track starts** with their original timestamps and titles.
-- Remembers estimated played sections separately for each long recording and favors less recent overlap.
-- Provides clipboard shortcuts for audio or video capped at 720p. These play normally and bypass radio histories.
+**Status: early test build for Windows x64.** Automated checks pass, but test your own scheduled playback and speaker before relying on it unattended.
 
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| Eligibility cutoff | **15 minutes** | Only seekable recordings at least this long receive smart seeking and sampling. |
-| Sampling | **On** | Rotate between sections of long recordings. |
-| Sample length | **10-30 minutes** | Choose a new allowance per recording, capped to its duration. |
-| Sample fade-out | **5 seconds** | Fade the current sample, then load the next track. Set to zero to disable. |
-| Session duration | **3 hours** | Maximum runtime of the whole session, including loading and pauses. |
+## Defaults and adjustable limits
 
-**Crossfade has been removed.** There is one MPV window, with no second decoder, preloading controller, or shared-history coordination. The existing simple sample fade-out remains; tracks never overlap. YouTube loading can leave a gap.
+| Setting | Default | Allowed range or choice | Meaning |
+| --- | --- | --- | --- |
+| Eligibility cutoff | **15 minutes** | 0.01–1,440 minutes | Only recordings at least this long receive smart starting points and optional sampling. They must have a known duration and allow seeking. |
+| Sampling | **On** | On or Off | On rotates between samples of long recordings. Off lets them continue from their smart starting point. |
+| Minimum sample length | **10 minutes** | 0.01–1,440 minutes; no greater than the maximum | Shortest playback allowance to choose for each eligible recording. |
+| Maximum sample length | **30 minutes** | 0.01–1,440 minutes; no less than the minimum | Longest playback allowance to choose. Shorter recordings finish sooner. |
+| Sample fade-out | **5 seconds** | 0–60 seconds | Fade the sample, then load the next track. Zero turns the fade off. |
+| Session duration | **3 hours** | 1 minute–24 hours, entered as hours | Maximum runtime of the entire scheduled session, including pauses and loading. |
 
-A 15-minute recording cannot supply a 30-minute sample. Its allowance is capped at 15 minutes and its start is chosen early enough to fit it. Short songs receive no automatic seek or sampling cutoff.
+The ranges show what the current settings accept, not suggested listening lengths: **1,440 minutes = 24 hours**. Sample allowances use whole seconds, with a minimum of one second. Keep the sample minimum at or below the maximum; an invalid pair falls back to 10–30 minutes.
 
-**Status: test build.** Automated checks use generated local audio and simulated inputs. Test your own YouTube connection, speaker and Windows schedule before relying on unattended playback.
+For example, an eligible 15-minute mix cannot supply a 30-minute sample. Its allowance is shortened to fit, and the starting point leaves room for it. Tracks play one after another; YouTube loading can leave a gap.
 
-## Quick start: guided setup
+Change session duration during setup. Change the other settings in the [sampling settings file](#change-sampling-settings).
 
-1. Install MPV yourself from the [official installation page](https://mpv.io/installation/). This project has used [Shinchiro Windows builds](https://github.com/shinchiro/mpv-winbuild-cmake/releases). For an x64 PC choose `mpv-x86_64-...7z`, not developer, 32-bit or ARM packages. Extract the **whole build** into `C:\MPV`, including `mpv.exe` and `mpv.com`.
-2. On this repository choose **Code -> Download ZIP**. Extract the whole project to a separate folder. Keep `INSTALL.cmd`, `Install.ps1`, and `payload` together.
-3. Run `INSTALL.cmd` as the Windows user who will listen. Setup requests elevation while carrying that user's identity forward. It does not install or replace MPV.
-4. Select a detected speaker by **number**. At each playlist question, type **S** for the displayed sample, paste your own URL, or press **Enter to skip** that task.
-5. Enter schedules using the examples below, review the summary, and type **YES** to save. Existing matching files/tasks are backed up first; playback histories are retained. Missing yt-dlp is downloaded from upstream only after approval and accepted only after its SHA-256 checksum matches that same release.
-6. In Task Scheduler, right-click a configured task and choose **Run**. Check the speaker, playlist, and repeat behavior before waiting for the next scheduled start.
+## Install and try it
 
-The guided installer is **revision 8**. It builds the small `Radio-Hidden.exe` starter from included source using Windows' existing .NET Framework, then creates one starter action per radio task. No extra download or developer tools are needed to build the starter. PowerShell still supervises the same single MPV player, without a console window. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
+1. **Install MPV separately.** Start at [MPV's installation page](https://mpv.io/installation/). This project uses [Shinchiro Windows builds](https://github.com/shinchiro/mpv-winbuild-cmake/releases). For Windows x64, choose `mpv-x86_64-...7z` and extract the **whole archive** into `C:\MPV`, including `mpv.exe` and `mpv.com`.
+2. **Download this project:** choose **Code → Download ZIP**, then extract it to a separate folder. Keep `INSTALL.cmd`, `Install.ps1`, and `payload` together.
+3. **Run `INSTALL.cmd`** from the Windows account that will play the music. Accept the Windows administrator prompt when asked. The installer does not install or replace MPV.
+4. **Choose your speaker, playlists, and schedules** using the examples below. Review the summary and type **YES** to save.
+5. **Test a task:** open **Task Scheduler**, right-click **Music - Morning** or **Music - Day Finisher**, and choose **Run**. Confirm that MPV opens and music comes from the selected speaker.
 
-### Optional recommendation: Deno
+The installer is **revision 8**. It downloads yt-dlp only if missing, verifies the download's checksum, and builds the small `Radio-Hidden.exe` helper from included source. Deno is an [optional recommendation](#optional-recommendation-deno).
 
-Deno runs JavaScript code that yt-dlp uses to solve YouTube challenges and obtain playable stream information. **It is recommended for fuller YouTube support, but it is not a requirement of this installer.** Some streams can play without it; if your playlists already work, you may continue without installing it. Consider adding it if yt-dlp reports JavaScript/signature extraction problems or missing formats. It cannot fix every network, account, regional, or YouTube error. See [yt-dlp's explanation](https://github.com/yt-dlp/yt-dlp/issues/14404) and [current runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
-
-**Setup continues if Deno is missing, outdated, blocked, incompatible, or unresponsive.** It displays a recommendation and does not add a confirmation question, download Deno, or change playback/history settings. The separate SHA-256 verification for newly downloaded yt-dlp remains mandatory.
-
-#### Choose a compatible Deno download
-
-1. In Windows open **Settings -> System -> About**. Under **Device specifications**, read **System type**, including both the operating-system bitness and processor type. Do not infer this from the browser or from "64-bit" alone. [Microsoft's instructions](https://support.microsoft.com/en-us/windows/experience/compatibility/32-bit-and-64-bit-windows-frequently-asked-questions)
-2. Under **Windows specifications**, check the version. Deno documents Windows 10 version **1709 or newer**, including Windows 11, as its desktop minimum. Use a **stable Deno release 2.3.0 or newer** for yt-dlp. [Deno installation requirements](https://docs.deno.com/runtime/getting_started/installation/)
-3. Open the [official Deno release assets](https://github.com/denoland/deno/releases/latest) and match the exact filename below. Expand **Show all assets** if necessary.
-
-| Windows System type | Deno ZIP to choose |
-| --- | --- |
-| **64-bit operating system, x64-based processor** (Intel or AMD) | **`deno-x86_64-pc-windows-msvc.zip`** |
-| **64-bit operating system, ARM-based processor** (ARM64, for example Snapdragon) | `deno-aarch64-pc-windows-msvc.zip` |
-| **32-bit operating system** | No official current Windows 32-bit Deno download. Do not choose a 64-bit ZIP. |
-
-`x86_64` means the x64/AMD64 family and works with compatible **Intel and AMD** processors. `aarch64` means ARM64; `pc-windows-msvc` identifies a Windows build. These are Deno download mappings: this radio toolkit's guided setup and tests currently target **Windows x64**. An ARM64 Deno asset does not establish that the whole radio toolkit is tested on ARM. The current toolkit does not support 32-bit Windows.
-
-Choose the complete **`deno-...zip`** archive. The other asset names have different purposes:
-
-- `apple-darwin` = macOS; `unknown-linux-gnu` = Linux.
-- `.from-...bsdiff` = an incremental update patch, not the complete program.
-- `.sha256sum` = checksum text, not the program. To verify a ZIP, use the matching **`.zip.sha256sum`** from the same release.
-- `denort`, `libdenort`, `.d.ts`, `deno_src.tar.gz`, and **Source code** = runtime/development/source files; they are not the Deno CLI archive needed here.
-
-Extract the chosen ZIP and put **`deno.exe` directly in `C:\MPV`**, beside `yt-dlp.exe` (or where setup will install it). It must not remain inside the ZIP or an extra nested folder. In Command Prompt or PowerShell, run `C:\MPV\deno.exe --version` and check that it reports a stable version at least 2.3.0. Restart MPV after adding Deno; no reinstall or task/history reset is needed. No Visual Studio or additional music player is needed for the ready-made executable.
-
-The advisory check also accepts Deno on the current account's PATH when setup and the scheduled listener use the same Windows account. If UAC uses a different administrator, it checks the portable location only; that administrator's PATH does not prove availability for the listener. If you change PATH, sign out and back in before testing scheduled playback, or use the portable location. Custom Node/QuickJS settings are not validated or changed. Test the configured task as the listener; a successful Deno version check does not verify YouTube access or the speaker. Do not disable security protection if execution is blocked.
+Setup backs up files and matching tasks it replaces in `C:\MPV\setup-backups`. Running setup again can reset custom playback settings; listening-history files are retained unless you delete them. If setup fails, it shows the failed step and an error-log location; it does not automatically undo completed changes.
 
 ### Exactly what to type
 
-Type only your answer, not the prompt or brackets. Enter accepts a displayed default; **Q cancels** at an input prompt.
+Type only your answer, not the prompt or brackets. **Enter accepts a displayed default; Q cancels at an input prompt.** At a playlist question, an empty answer skips that task.
 
 | Question | Example answer | Meaning |
 | --- | --- | --- |
-| Speaker | `2` | Use the device numbered 2 in YOUR detected list. No device code to copy. |
+| Speaker | `2` | Use speaker number 2 in your detected list. No device code to copy. |
 | Playlist | `S` | Use the sample displayed for this task. |
-| Playlist | Full `https://...playlist?list=...` URL | Use your own playlist; no `--shuffle` or quotes needed. |
-| Playlist | Press Enter on an empty line | Skip this task and its remaining questions; leave an existing task unchanged. |
+| Playlist | Full `https://www.youtube.com/playlist?list=...` URL | Use your own playlist. Paste the actual link, without quotes or extra commands. |
+| Playlist | Press Enter on an empty line | Skip this task and its remaining questions. An existing task is left unchanged. |
 | Start time | `06:45`, `0645`, or `6:45 AM` | 6:45 in the morning. |
 | Start time | `18:35`, `1835`, or `6:35 PM` | 6:35 in the evening. |
-| Days | `1` / `2` / `3` / `4` | Monday-Friday / Monday-Saturday / every day / weekends. |
-| Custom days | `MON,WED,FRI` | Only those days. |
+| Days | `1` / `2` / `3` / `4` | Monday–Friday / Monday–Saturday / every day / weekends. |
+| Custom days | `MON,WED,FRI` | Only Monday, Wednesday, and Friday. |
 | Maximum runtime | `3` | Three hours. |
 | Maximum runtime | `1.5` | One hour thirty minutes. |
 | Maximum runtime | `0.75` | Forty-five minutes. |
 | Maximum runtime | `11.5` | Eleven hours thirty minutes. |
 | Maximum runtime | `24` | Twenty-four hours; the maximum. |
-| Confirmation | `YES` | Apply the reviewed changes; Enter defaults to NO. |
+| Confirmation | `YES` | Save the reviewed changes. Enter defaults to NO. |
 
-**Maximum runtime is a DURATION, not the time of day to stop.** Enter a number of hours only, using a decimal point for fractions. `45` and `96` exceed the 24-hour maximum; `45 min`, `1:30` and unit words are rejected. A start of 18:35 plus 1.5 hours has an approximate stop of 20:05, assuming an on-time uninterrupted run. Defaults remain Morning **06:45, Mon-Sat, 3 hours** and Day Finisher **15:45, Mon-Fri, 3 hours**. All clock times use the computer's local time.
+**Maximum runtime is a DURATION, not the time of day to stop.** Enter hours as a number, using a decimal point for fractions. For 45 minutes, enter `0.75`; `45` exceeds the 24-hour limit. Formats such as `45 min` and `1:30` are not accepted for duration.
 
-The installer validates URL structure, not playlist existence or playback rights. Share/index/time parameters are removed from scheduled playlist URLs. Skipping a task does not disable or remove an existing task; use Task Scheduler for that.
+| Suggested task | Start time | Days | Duration |
+| --- | --- | --- | --- |
+| Morning Music | 06:45 (6:45 AM) | Monday–Saturday | 3 hours |
+| Day Finisher | 15:45 (3:45 PM) | Monday–Friday | 3 hours |
 
-## Playback and settings
+All times use your computer's local clock. You can change these suggestions during setup. [Listen to the sample playlists](EXAMPLE-PLAYLISTS.md).
+
+### Optional recommendation: Deno
+
+**Deno helps yt-dlp handle YouTube's JavaScript checks and find playable audio.** Some playlists work without it. Consider adding it if YouTube playback reports JavaScript/signature errors or missing formats. It does not fix every playback problem. [yt-dlp's runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS)
+
+The installer recommends Deno but **continues without it**. It does not download Deno automatically.
+
+#### Choose the right download
+
+Open **Settings → System → About → System type**, then choose the matching ZIP from the [official Deno release assets](https://github.com/denoland/deno/releases/latest). Expand **Show all assets** if needed.
+
+| Windows System type | Deno ZIP to choose |
+| --- | --- |
+| **64-bit operating system, x64-based processor** (Intel or AMD) | **`deno-x86_64-pc-windows-msvc.zip`** |
+| **64-bit operating system, ARM-based processor** (ARM64, for example Snapdragon) | `deno-aarch64-pc-windows-msvc.zip` |
+| **32-bit operating system** | No current official Windows 32-bit Deno download. Do not choose a 64-bit ZIP. |
+
+Use stable **Deno 2.3.0 or newer** for yt-dlp. Deno requires Windows 10 version 1709 or newer, including Windows 11. The ARM entry above describes Deno; this radio project is tested for **Windows x64**, not ARM or 32-bit Windows. [Deno's installation requirements](https://docs.deno.com/runtime/getting_started/installation/)
+
+| Other asset names | What they mean |
+| --- | --- |
+| `apple-darwin` / `unknown-linux-gnu` | macOS / Linux downloads. |
+| `.from-...bsdiff` | Update patches, not the complete program. |
+| `.sha256sum` | Checksum text, not the program. For ZIP verification, use its matching `.zip.sha256sum` from the same release. |
+| `denort`, `libdenort`, `.d.ts`, source archives | Developer/runtime files; choose the full **`deno-...zip`** instead. |
+
+#### Where to put it
+
+Extract **`deno.exe` directly into `C:\MPV`**, beside `mpv.exe` and `yt-dlp.exe`. Do not leave it inside the ZIP, a temporary WinRAR folder, or an extra subfolder. You do not need to leave a Deno window open.
+
+To check it, run `C:\MPV\deno.exe --version` in Command Prompt or PowerShell. Restart MPV after adding it.
+
+**Putting Deno in `C:\MPV` is the simplest option.** Windows can otherwise make a program available to one user but not another. This location lets our setup find the intended copy without changing Windows settings. If Deno is already installed and setup finds it, no extra copy is needed. Test your music task afterward to confirm actual playback.
+
+## Change sampling settings
 
 Edit `C:\MPV\portable_config\script-opts\random-start.conf`, then restart MPV:
 
@@ -105,108 +112,67 @@ section_max_minutes=30
 fade_seconds=5
 ```
 
-`section_mode=no` plays long mixes without a sampling limit, while retaining smart starting points. `fade_seconds=0` disables the sample fade-out. There is no crossfade setting.
+The [defaults table](#defaults-and-adjustable-limits) explains each value and its limits. `section_mode=no` turns sampling off while keeping smart starting points. `fade_seconds=0` turns the sample fade-out off. Enable File Explorer's **File name extensions** so the file does not accidentally become `random-start.conf.txt`.
 
-MPV supplies [shuffle, seeking, script options, audio routing and playback controls](https://mpv.io/manual/stable/). Lua supplies our history and section-selection rules. `Radio.ps1` only starts/stops one MPV and enforces the whole-session duration. The launcher explicitly loads this Lua script once and disables automatic loading of other scripts for scheduled playback.
+## Controls and a quick playback check
 
-Use MPV's normal controls in its window: **Space** pauses, **>** selects the next playlist entry, **9/0** adjusts volume, and **Q** quits. **Stop Radio.cmd** stops this installation's radio. Other MPV windows are left alone. Sampling counts forward, unmuted playback; the whole-session runtime also counts pauses and loading.
-
-### Verify that MPV is listening
-
-Press **F8 in the MPV window** to display the loaded Lua version and settings. During a scheduled radio session, **Check Radio.cmd** additionally connects to that actual MPV through a local Windows named pipe and waits for a fresh Lua acknowledgement. One PASS should show cutoff `15`, sampling enabled and range `10` to `30`. Check the physical speaker by listening. Directly launched MPV instances use F8; they do not necessarily have the launcher's diagnostic pipe.
-
-Use an MPV build with Lua and `user-data` support (tested from 0.37). No Python or extra PowerShell modules are required to play music.
-
-## History and selection
-
-Histories stay in `C:\MPV\portable_config` and are never uploaded by this project:
-
-| File | Contents |
+| Control | Action |
 | --- | --- |
-| `recent-track-history.txt` | Last 10 accepted starts: original timestamp, video ID and title. |
-| `random-start-history.txt` | Last 10 selected starting percentages. |
-| `heard-sections.txt` | Estimated played intervals per recording, including readable ranges such as `42:37-68:10`. |
-| `heard-sections.txt.bak` | Previous complete section checkpoint for recovery. |
+| Space in MPV | Pause or resume. |
+| `>` in MPV | Next playlist entry. |
+| `9` / `0` in MPV | Lower / raise volume. |
+| Q in MPV | Quit playback. |
+| F8 in MPV | Show the loaded radio script and its settings. |
+| `C:\MPV\Check Radio.cmd` | Check that the scheduled MPV and radio script both respond. |
+| `C:\MPV\Stop Radio.cmd` | Stop this installation's radio. |
 
-Repeat blocking is separate from history retention: at most five recent starts, reduced according to the number of unique videos to leave choices in small playlists. MPV shuffles playlist entries; duplicate entries are not removed. The shuffled queue is rebuilt on restart, while history persists.
+With default settings, the radio check should show a **15-minute cutoff**, sampling **on**, and a **10–30-minute** range. Listen to confirm the selected speaker. Clipboard audio/video shortcuts play a copied YouTube link normally, without updating the radio histories; video is capped at 720p.
 
-Smart starts stay within 0%-75% and favor less recently played overlap in that recording. Sampling narrows this range to leave room for the selected allowance; percentage exclusions relax if necessary. With sampling off, scoring looks ahead up to 20 minutes. This is a preference for variety, not a guarantee of never repeating audio.
+Keep the selected Windows user logged in; locking the screen is fine. The task can request wake from sleep, but it cannot turn on a powered-off computer. Test sleep/wake and speaker availability on your PC. A missed start is not automatically caught up; use **Run** to test immediately.
 
-Section tracking excludes pauses, buffering, muted playback and detected seeks. It estimates player activity, not whether someone heard the physical speaker. It saves about every 15 seconds and on normal file transitions/shutdown. Abrupt termination or write failures can lose the unsaved portion. History is bounded to 40 intervals per recording, 2,000 overall and 180 days by default; recent overlap has a 14-day half-life. Unknown-duration and nonseekable sources play normally.
+## Listening history
 
-Only one radio script should write these history files at a time. Scheduled launchers coordinate starts for the same installation. Avoid running the script separately alongside the scheduled player; clipboard launchers already disable it.
+History is stored locally in `C:\MPV\portable_config`:
 
-## Update an existing working computer
+| File | What it remembers |
+| --- | --- |
+| `recent-track-history.txt` | The last 10 accepted track starts, with dates and titles. |
+| `random-start-history.txt` | The last 10 selected starting percentages. |
+| `heard-sections.txt` | Played sections for each recording, such as `42:37–68:10`. |
+| `heard-sections.txt.bak` | A previous section-history save for recovery. |
 
-GitHub changes do not automatically update your PC. **This update adds only the hidden-start helper; `Radio.ps1`, Lua, sampling settings and all three histories are unchanged.**
+Remembering ten tracks does not block all ten from playing again: repeat protection adjusts for small playlists. Smart starts favor less recently heard portions, but cannot guarantee no repeated audio. Section history excludes pauses, buffering, muted playback, and detected seeks; it estimates playback rather than whether someone heard the speaker. It saves about every 15 seconds and on normal stops. A forced shutdown can lose the latest unsaved portion.
 
-### Hidden-start-only upgrade (already using Radio.ps1)
+## Start over with a fresh setup
 
-No reinstall or replacement of `portable_config` is needed.
+For an earlier test installation, this is the simplest way to reset everything:
 
-1. Stop the music using **Stop Radio.cmd**. Export your music tasks as a backup.
-2. Download a fresh repository ZIP. Copy only `payload/Radio-Hidden.cs` and `payload/Build-HiddenStarter.ps1` into `C:\MPV`. Keep your existing `Radio.ps1`, Lua, settings and histories.
-3. In PowerShell or Command Prompt run this once:
+1. Run **Stop Radio.cmd** and close MPV.
+2. Open **Task Scheduler → Task Scheduler Library**. Delete only this project's music tasks, normally **Music - Morning** and **Music - Day Finisher**, including any older copies you renamed.
+3. In File Explorer, open `C:\MPV` and delete **`portable_config`**. **This removes your speaker/sampling settings and all listening history.** Copy that folder elsewhere first if you want to keep a backup.
+4. Download and extract a fresh project ZIP, then run **`INSTALL.cmd`** and choose your speaker, playlists, and schedules again.
+5. Run each new task once to check playback.
 
-   ```text
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Build-HiddenStarter.ps1"
-   ```
+Keep MPV, yt-dlp, and any optional `deno.exe` in `C:\MPV`. The installer replaces its own helper files. You do not need to reset a working installation just because this documentation changed.
 
-   It builds `C:\MPV\Radio-Hidden.exe` locally. It will not overwrite an existing helper: for a future rebuild, stop the radio and move the old executable into your backup first. If Windows/security policy blocks compilation or execution, stop and report it; do not disable protection.
-4. In each music task's **Properties -> Actions -> Edit**, change **Program/script** to `C:\MPV\Radio-Hidden.exe`. Remove the PowerShell options through `-File "C:\MPV\Radio.ps1"` from **Add arguments**. Keep the `-Playlist` and `-DurationSeconds` values exactly as they were. Keep **Start in** as `C:\MPV` and leave triggers, conditions and runtime settings alone. For example, a two-hour Day Finisher uses:
+## Troubleshooting
 
-   ```text
-   -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 7200
-   ```
+| Problem | What to check |
+| --- | --- |
+| Task does not start | Confirm its next run time, enabled state, selected Windows user, and that the user is logged in. |
+| Wrong speaker or no sound | Check MPV's volume and the chosen output; rerun setup to select a different device. |
+| YouTube extraction fails | Run `Update yt-dlp.cmd`; consider [Deno](#optional-recommendation-deno). Also check the link and internet connection. Setup validates the URL format, not whether every playlist entry can play. |
+| Radio settings seem ignored | Restart MPV, press F8, and run `Check Radio.cmd`. Keep script backups outside the `scripts` folder. |
+| Task starts but no MPV appears | Check Task Scheduler's **Last Run Result** and `C:\MPV\Radio-Hidden-error.log`. Check the log's date; a later success does not erase it. |
+| Antivirus examines or blocks the helper | Record the product name and exact message. The helper is built locally and unsigned; do not disable protection to complete setup. |
+| yt-dlp download verification fails | Read the setup error and retry the official download later. The installer does not accept a download with a missing or mismatched checksum. |
 
-5. Run the task. Check the MPV controls, F8 and **Check Radio.cmd**, then **Stop Radio.cmd**. Scheduled starts should no longer create a PowerShell terminal. Manually opened diagnostic/CMD windows are intentionally unchanged.
+Checksum verification applies to **newly downloaded yt-dlp**. An existing copy is retained and is not checked again by this installer. A checksum confirms agreement with the upstream file list; it is not a malware-free certification.
 
-To undo just this update, restore the exported task actions; no playback or history files need changing. On failure, check Task Scheduler's **Last Run Result** and `C:\MPV\Radio-Hidden-error.log`. The log contains the latest helper/PowerShell failure, is bounded, and is not erased on success: check its timestamp. If that folder is unwritable, the nonzero task result is still returned but the log may be unavailable.
+Report problems through [GitHub Issues](https://github.com/roytt-ebug/mpv-radio-automation/issues), including the installer revision and exact error. Remove private account details before sharing logs or screenshots.
 
-### Older installations (including the former crossfade build)
-
-1. Stop the music task and close its MPV windows. Back up `portable_config` outside its `scripts` folder and export the music tasks.
-2. Download and extract a fresh repository ZIP. Copy the **contents of `payload` into `C:\MPV`**, replacing included files. Copy all files, including `Play-YouTube.ps1`; do not replace just the Lua script. The payload contains no `mpv.conf` or history files, so your speaker and histories are retained. Its `random-start.conf` supplies the defaults above; keep your backup if you customized settings.
-3. Build `Radio-Hidden.exe` using the command above, then use the new helper action. Keep your existing playlist, duration and triggers. MPV's normal player window remains available.
-4. **If your older task runs taskkill followed by `mpv.exe`,** replace those two actions with the single action in [manual step 7](MANUAL-SETUP.md#7-create-the-morning-task-manually). Preserve your triggers, days and intended duration. Disable duplicate legacy tasks that still kill all MPV windows.
-5. Run a music task. Confirm one MPV window, press F8, and run **Check Radio.cmd**. Listen through a sample transition.
-
-The old crossfade version may leave `radio-session.json` behind. The new code does not read it; it can be deleted after stopping playback. No MPV reinstall or speaker reconfiguration is needed for the payload update.
-
-## Scheduler and installation safeguards
-
-Each task runs one `Radio-Hidden.exe` action. This launch-only helper starts the adjacent, unchanged `Radio.ps1` with Windows' **CreateNoWindow** setting, waits for it and returns its exit code to Task Scheduler. It does not choose tracks, change volume, manage history or replace the supervisor's stop logic. MPV starts with its terminal disabled; its normal playback window stays available. A new session asks the previous radio launcher for the same installation to stop and waits before opening one MPV. Normal shutdown asks MPV to quit and save history; forced cleanup is restricted to the exact process started by that launcher.
-
-The launcher and Lua independently enforce the requested runtime. If the launcher is forcibly terminated, MPV can remain open until its Lua session limit; close its visible window or use Stop Radio. Task Scheduler's backup stop limit is one minute longer than the intended duration to allow cleanup.
-
-Tasks require the chosen Windows user to remain logged in; a locked session is okay. Wake-to-run is requested, missed-start catch-up is off, and failures can retry every five minutes up to three times. Duplicate starts of the same task are ignored. Wake timers, power conditions, sleep and the speaker still depend on Windows/hardware; a powered-off PC is not started by these tasks.
-
-Setup validates inputs, shows a review before saving, and backs up replaced configuration, matching tasks and shortcuts under `C:\MPV\setup-backups`. It stops its radio before updating and asks you to close other MPV windows from that installation. Unexpected failures show a stage and error-log path. Partial installation has **no automatic rollback**; use the backup and inspect tasks before retrying. Skipping an existing task leaves it unchanged.
-
-Clipboard shortcuts accept one YouTube URL and pass it directly to MPV without placing pasted text in a Command Prompt command. They stop only this installation's radio before opening manual playback.
-
-Windows Terminal has a [documented issue with `-WindowStyle Hidden`](https://github.com/microsoft/terminal/issues/12464). The helper avoids creating a PowerShell console in the first place, using [Windows' documented no-window process setting](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.processstartinfo.createnowindow). It does not change the default terminal application or security policies. It is built locally from reviewable source, not supplied as an opaque downloaded executable. Managed computers may restrict local compilation or unsigned executables; report such restrictions rather than bypassing them.
-
-## Troubleshooting and checks
-
-```bat
-C:\MPV\mpv.com --no-config --load-scripts=no --audio-device=help
-C:\MPV\yt-dlp.exe --version
-C:\MPV\yt-dlp.exe -U
-```
-
-Use the entire detected `wasapi/{GUID}` device ID. Enable File Explorer's **File name extensions** to avoid `.lua.txt` or `.conf.txt`. Keep script backups outside `scripts` so MPV cannot load them twice.
-
-For YouTube extraction failures, follow [yt-dlp's current JavaScript-runtime guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS). The installer checks for Deno but does not install it. Network, upstream or regional restrictions can still prevent playback.
-
-For a missing yt-dlp, setup resolves one official stable release, downloads its `SHA2-256SUMS` and `yt-dlp.exe`, and compares SHA-256 before installing the executable. A download error, missing/ambiguous/malformed checksum, or mismatch stops setup with no unverified executable accepted. Temporary download files are cleaned up. An existing `yt-dlp.exe` is left unchanged and is not retrospectively verified by this check. The separate `yt-dlp -U` update command is unchanged. This checks integrity against the retrieved upstream list, not a signature or a malware-free guarantee. If GitHub is unavailable or rate-limits the lookup, wait and retry; do not bypass verification.
-
-Tests cover input validation, Windows task definitions, history, seeking, sample transitions, bounded runtime, scoped shutdown and a live Lua acknowledgement. Local media tests do not verify YouTube or a physical speaker. The manual's full Lua block is checked against the shipped script.
-
-GitHub Actions checks run on pull requests and pushes to `main`, not again on every development-branch push. Superseded runs are cancelled. A failed-run email concerns repository tests, not a fault reported by your installed player. Account notification preferences remain under your control in [GitHub notification settings](https://github.com/settings/notifications).
-
-Project code uses the MIT license. See [THIRD_PARTY.md](THIRD_PARTY.md) for upstream dependencies. Sample playlists are contributor-approved suggestions; no music, credentials or third-party executables are distributed here.
+Project code is [MIT licensed](LICENSE). MPV and yt-dlp are obtained separately; see [third-party software notes](THIRD_PARTY.md). Automated [GitHub checks](https://github.com/roytt-ebug/mpv-radio-automation/actions) cover installer inputs, task definitions, history, sampling, and local-audio playback; they do not test your physical speaker or YouTube connection.
 
 ## Alternative: set everything up manually (no installer)
 
-**[Open the complete manual setup guide](MANUAL-SETUP.md).** It includes folder layout, speaker selection, `mpv.conf`, the entire current Lua script, sampling settings, launcher files, sample playlists and exact Task Scheduler actions. Follow it instead of the installer to avoid duplicate tasks.
+[Open the complete manual setup guide](MANUAL-SETUP.md) for folder layout, speaker selection, configuration, the full Lua script, and exact Task Scheduler entries. Use it as an alternative to guided setup.

@@ -1,63 +1,28 @@
 # Sample music playlists
 
-These contributor-approved samples are now shown **inside guided setup (revision 6)**. At either task's playlist prompt, type **S** and press Enter to use the sample shown for that task. You may instead paste your own URL, or press Enter without typing to skip. A blank answer never automatically selects music and leaves an existing task unchanged.
+At either playlist question in `INSTALL.cmd`, type **S** to use the sample shown. Paste your own YouTube playlist link to choose different music, or press **Enter** to skip that task. Skipping leaves any existing task unchanged.
 
-## Morning Music
+| Sample | Suggested start | Days | Session duration |
+| --- | --- | --- | --- |
+| [Morning Music](https://www.youtube.com/playlist?list=PLZAsCc2NQgn0) | 06:45 (6:45 AM) | Monday–Saturday | 3 hours |
+| [Day Finisher](https://www.youtube.com/playlist?list=PLBejJIaDgbyQ) | 15:45 (3:45 PM) | Monday–Friday | 3 hours |
 
-[Open the Morning Music sample](https://www.youtube.com/playlist?list=PLZAsCc2NQgn0)
+Change any of these schedule suggestions during setup. Duration is entered in **hours**, up to 24: `1.5` means 90 minutes and `0.75` means 45 minutes.
 
-At the Morning task's playlist prompt, type **S** or paste:
+## Links to copy
+
+**Morning Music**
 
 ```text
 https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
 ```
 
-The installer suggests **06:45 (6:45 AM), Monday-Saturday, for three hours**. These are editable schedule suggestions, not requirements for this playlist.
-
-## Day Finisher
-
-[Open the Day Finisher sample](https://www.youtube.com/playlist?list=PLBejJIaDgbyQ)
-
-At the Day-finisher task's playlist prompt, type **S** or paste:
+**Day Finisher**
 
 ```text
 https://www.youtube.com/playlist?list=PLBejJIaDgbyQ
 ```
 
-The installer suggests **15:45 (3:45 PM), Monday-Friday, for three hours**. Choose a different time, set of days, or runtime when needed.
+These contributor-approved links are optional suggestions. Music remains on YouTube; playlist contents and availability can change. Sharing a playlist does not sign you into its owner's account, but the owner/channel may be publicly visible. Use links you are comfortable sharing.
 
-**Maximum runtime is a DURATION, not the time of day to stop.** For example, `3` means three hours after launch, not 3 PM. Enter hours only: `1.5` means ninety minutes, `0.75` means forty-five minutes, and `11.5` means eleven hours thirty minutes. The maximum is `24`. Do not enter `1:30` or unit words.
-
-## Using these links on an already configured computer
-
-Updating this repository does **not** change tasks already saved on your PC. There is no need to reinstall MPV or replace the Lua script just to change playlists.
-
-1. Open the existing task's **Properties -> Actions** and edit its radio launcher action.
-2. Change only the URL after `-Playlist`. Keep the `-DurationSeconds` value, triggers, and days.
-3. The full examples below are for the new hidden helper. If the task still launches PowerShell or has the old taskkill + direct-MPV actions, follow [the launcher upgrade instructions](README.md#update-an-existing-working-computer) before changing executable/arguments. For a playlist-only edit, simply replace the URL in your current arguments.
-
-**Morning Music - Add arguments (three hours):**
-
-```text
--Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
-```
-
-**Day Finisher - Add arguments (three hours):**
-
-```text
--Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
-```
-
-The executable is `C:\MPV\Radio-Hidden.exe`, with `C:\MPV` as **Start in**. The installer builds that helper and supplies the command automatically; enter **S** or only the URL. **S is an installer choice, not a player command.**
-
-## Availability and privacy
-
-These are external YouTube playlists, not music distributed with this project. Their contents and availability can change. The project does not guarantee playback of every entry in every region or client. URL-format validation in the installer does not check that a playlist exists or is playable.
-
-The sample URLs retain the supplied playlist IDs and omit `si=` sharing parameters. This does not anonymize a playlist or its publicly visible owner/channel. Public playlists can be viewed/shared by anyone; unlisted playlists can be viewed/shared by anyone with the link. Publishing an unlisted link here makes it available to repository visitors. See [YouTube's playlist privacy documentation](https://support.google.com/youtube/answer/3127309?hl=en).
-
-A playlist link is not a Google sign-in credential. This setup does not authenticate as the playlist owner or distribute Google credentials, browser cookies or account tokens. Keep authentication files and private account details out of this repository.
-
-Replacing a link in the current documentation does not remove earlier versions from Git history or copies already downloaded. These instructions change only the URLs used for future setup or task launches; they do not erase old history.
-
-See [README.md](README.md) for the guided installer, or [MANUAL-SETUP.md](MANUAL-SETUP.md) to configure everything yourself with the complete Lua code. Recommendations are not a grant of rights for public or commercial playback; see [THIRD_PARTY.md](THIRD_PARTY.md).
+[Back to setup and input examples](README.md#exactly-what-to-type) · [Manual setup](MANUAL-SETUP.md) · [Third-party notes](THIRD_PARTY.md)
