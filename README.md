@@ -1,218 +1,149 @@
 # MPV Radio Automation for Windows
 
-A small Windows toolkit that turns MPV + yt-dlp into an automated YouTube background-music / radio system.
+**Turn a Windows desktop into a scheduled background-music player that treats ordinary songs and long mixes differently.**
 
-The guided installer now offers the [Morning Music and Day Finisher sample playlists](EXAMPLE-PLAYLISTS.md) directly: type **S** to use the sample shown for that task, paste a different URL, or press **Enter** to skip. Prefer doing everything yourself? The [manual setup guide](MANUAL-SETUP.md) includes the complete Lua code and exact Task Scheduler fields.
+Choose a YouTube playlist, a speaker, and a schedule. Short songs play normally. Long recordings can begin at a less-recently-heard section, using a local record of the portions actually played. An optional sampling mode moves between long mixes after a chosen listening interval instead of letting a ten-hour video occupy the whole session.
+
+This is a lightweight automation layer around **mpv + yt-dlp**, not a streaming service, a broadcast server, or a replacement for either player. MPV is installed separately. No music, account credentials or third-party executables are included.
 
 ## What it does
 
-- Plays a shuffled YouTube playlist on a schedule, using a selected audio output.
-- Can request waking a sleeping PC and play while the selected user is logged in but the screen is locked.
-- Stops an older accessible mpv.exe before a scheduled session starts.
-- Remembers the last 10 accepted track starts across sessions, including short tracks, with timestamps and titles.
-- Tracks under 20 minutes are not randomly seeked; tracks 20 minutes or longer get a random 0%-75% starting point.
-- Remembers the last 10 random-start percentages and avoids exact recent repeats.
-- Includes clipboard launchers for audio-only playback and an always-on-top, resizable video window with video limited to 720p and best available audio.
+- Runs morning/day-finisher playlists through Windows Task Scheduler and a selected audio output, leaving the Windows default output unchanged.
+- Uses MPV shuffle plus a small-playlist-safe recent-track filter. Keeps the last **10 accepted track starts**, including short songs, across sessions.
+- Leaves recordings **under 20 minutes** unseeked. For seekable recordings **20 minutes or longer**, chooses a start in the first **0%-75%** while favoring sections played less recently.
+- Records estimated forward-played intervals **per recording**, rather than assuming everything after the starting point was heard.
+- Offers **optional 20-40-minute section sampling**, with a five-second fade-out before the next mix. **Off by default.** Normal songs are not shortened.
+- Includes clipboard shortcuts for audio-only playback and resizable, always-on-top video capped at 720p with best available audio. Manual shortcuts bypass radio scripts and histories.
 
-**Status:** early test build. Windows installer-input tests are provided in `tests/Test-InstallerInput.ps1`. Lua history tests with mocked MPV events are in `tests/test-radio-history.lua`. Passing them does not establish that a particular speaker, YouTube playlist or sleep/wake setup works. Always test playback on your computer.
+**Two independent settings:** the **20-minute recording-length cutoff** decides which recordings qualify; the **20-40-minute sampling interval** decides how long to play one qualifying recording when sampling is enabled. Neither is the morning/evening task's maximum runtime.
 
-## Requirements
+**Status: test build.** Automated tests cover input parsing, history, selection and playback transitions. Synthetic/headless checks do not establish real speaker behavior, YouTube availability, loudness quality or sleep/wake reliability on your PC. Test those locally before relying on unattended playback.
 
-Windows 10/11 x64, Windows PowerShell 5.1, internet access, and MPV installed manually in `C:\MPV`. The setup helper can download yt-dlp when missing, after you approve the setup summary. MPV and yt-dlp binaries are not bundled; see `THIRD_PARTY.md`.
+## Quick start: guided setup
 
-## Quick install
+1. Install MPV yourself from the [official installation page](https://mpv.io/installation/). This project has used [Shinchiro Windows builds](https://github.com/shinchiro/mpv-winbuild-cmake/releases). For an x64 PC choose `mpv-x86_64-...7z`, not developer, 32-bit or ARM packages. Extract the **whole build** into `C:\MPV`, including `mpv.exe` and `mpv.com`.
+2. On this repository choose **Code -> Download ZIP**. Extract the whole project to a separate folder. Keep `INSTALL.cmd`, `Install.ps1`, and `payload` together.
+3. Run `INSTALL.cmd` as the Windows user who will listen. Setup requests elevation while carrying that user's identity forward. It does not install or replace MPV.
+4. Select a detected speaker by **number**. At each playlist question, type **S** for the displayed sample, paste your own URL, or press **Enter to skip** that task.
+5. Enter schedules using the examples below, review the summary, and type **YES** to save. Existing matching files/tasks are backed up first; playback histories are retained. Missing yt-dlp is downloaded from upstream only after approval.
+6. In Task Scheduler, right-click a configured task and choose **Run**. Check the speaker, playlist, and repeat behavior before waiting for the next scheduled start.
 
-1. Install MPV yourself first. The Windows build used during development is available from https://github.com/shinchiro/mpv-winbuild-cmake/releases . Use the normal x86_64 build, not dev, i686 or aarch64, on a normal x64 PC.
-2. Extract the **whole MPV archive** into `C:\MPV`. Verify `C:\MPV\mpv.exe` and `C:\MPV\mpv.com` exist.
-3. On this repository choose **Code -> Download ZIP**. Extract the whole project ZIP into a separate folder. Keep `Install.ps1`, `INSTALL.cmd` and the `payload` folder together.
-4. Double-click `INSTALL.cmd` in that extracted project folder. Do not run it from inside the ZIP. Start it as the Windows user who will listen; setup will request elevation and carry that user's identity forward.
-5. Select an audio output by **number**. For each task, type **S** to use its displayed sample playlist, paste your own URL, or press Enter to skip. Then choose the start time, days and maximum runtime.
-6. Review the summary, including speaker name, Windows account, times and approximate stops. Type **YES** to apply. Nothing is saved merely by answering the input questions.
-7. In Task Scheduler, right-click a configured music task and choose **Run** to test it.
+The guided installer still identifies itself as **revision 3**; this update changes the Lua radio engine and documentation, not the input workflow. See [sample playlists and existing-task instructions](EXAMPLE-PLAYLISTS.md).
 
-The updated installer identifies itself as **guided setup (revision 3)**. It re-prompts on invalid input instead of crashing later. MPV is never installed or replaced by this helper.
+### Exactly what to type
 
-## Exactly what to type at each prompt
+Type only your answer, not the prompt or brackets. Enter accepts a displayed default; **Q cancels** at an input prompt.
 
-**Type only the answer and then press Enter.** Do not copy prompt labels or square brackets. A displayed `[Enter = ...]` is a default: press Enter without typing to accept it. Type `Q` at an input prompt to cancel.
-
-### 1. Audio output
-
-The installer displays a numbered list of **your detected devices**. For example:
-
-```text
-1. Autoselect device [follows Windows default; NOT a dedicated output]
-2. Speakers (Example USB speaker)
-3. Headset (Example headset)
-Audio output number (no default):
-```
-
-To choose the USB speaker in this example, type just `2` and press Enter. Use the number shown beside the desired device on YOUR computer; device order is not fixed.
-
-No GUID needs copying. For compatibility, the revised installer also accepts a complete detected `wasapi/{GUID}` ID or a bare GUID, but it only accepts one that matches a device in the detected list. Autoselect follows the Windows default rather than pinning playback to a separate speaker. A monitor-named HDMI output and Realtek Speakers are different outputs.
-
-### 2. Morning task, and then 3. Day-finisher task
-
-Both tasks ask the same four questions. The task name does not restrict the chosen clock time; you can use an evening test time for the Morning task.
-
-The Morning task now shows:
-
-```text
---- Music - Morning ---
-Sample playlist: https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
-Type S to use this sample, or paste your own full YouTube playlist link.
-YouTube playlist (S = sample, URL = your own, Enter = skip):
-```
-
-Type **S** and press Enter to use Morning Music. At the Day Finisher prompt, **S** uses `https://www.youtube.com/playlist?list=PLBejJIaDgbyQ` instead. Lowercase `s` and `sample` also work. A blank answer still skips the task; it never silently selects a sample.
-
-| Prompt | What to enter | Meaning / default |
+| Question | Example answer | Meaning |
 | --- | --- | --- |
-| YouTube playlist | `S` | Use the sample displayed for this particular task. |
-| YouTube playlist | Paste a complete YouTube link | Use your own playlist; the URL must contain `list=`. No command-line options needed. |
-| YouTube playlist | Press Enter without typing | Skip this task and all its later questions. Any existing task remains unchanged. |
-| Start time | `06:45`, `0645`, or `6:45 AM` | All mean 6:45 in the morning. Morning default is `06:45`. |
-| Start time, evening example | `18:35`, `1835`, or `6:35 PM` | All mean 6:35 in the evening. Day-finisher default is `15:45` (3:45 PM). |
-| Days | `1` | Monday-Friday; day-finisher default. |
-| Days | `2` | Monday-Saturday; morning default. Sunday excluded. |
-| Days | `3` | Every day, including Sunday. |
-| Days | `4` | Saturday and Sunday only. |
-| Custom days | `MON,WED,FRI` | Just those days. Full names and lowercase are accepted too. |
-| Maximum runtime | `3` | Three hours of playback; default for both tasks. |
+| Speaker | `2` | Use the device numbered 2 in YOUR detected list. No device code to copy. |
+| Playlist | `S` | Use the sample displayed for this task. |
+| Playlist | Full `https://...playlist?list=...` URL | Use your own playlist; no `--shuffle` or quotes needed. |
+| Playlist | Press Enter on an empty line | Skip this task and its remaining questions; leave an existing task unchanged. |
+| Start time | `06:45`, `0645`, or `6:45 AM` | 6:45 in the morning. |
+| Start time | `18:35`, `1835`, or `6:35 PM` | 6:35 in the evening. |
+| Days | `1` / `2` / `3` / `4` | Monday-Friday / Monday-Saturday / every day / weekends. |
+| Custom days | `MON,WED,FRI` | Only those days. |
+| Maximum runtime | `3` | Three hours. |
 | Maximum runtime | `1.5` or `1:30` | One hour thirty minutes. |
 | Maximum runtime | `45 min` | Forty-five minutes. |
-| Final confirmation | `YES` | Back up and apply the displayed settings. Enter defaults to NO. |
+| Confirmation | `YES` | Apply the reviewed changes; Enter defaults to NO. |
 
-**Maximum runtime is a DURATION, not the time of day to stop.** Start time is the local clock time at which playback begins. For example, a start of `18:35` and runtime of `1.5` means an approximate stop at `20:05` (8:05 PM), assuming an on-time uninterrupted run. The allowed runtime is 1 minute to 24 hours.
+**Maximum runtime is a DURATION, not the time of day to stop.** A start of 18:35 plus 1.5 hours has an approximate stop of 20:05, assuming an on-time uninterrupted run. Defaults remain Morning **06:45, Mon-Sat, 3 hours** and Day Finisher **15:45, Mon-Fri, 3 hours**. All clock times use the computer's local time.
 
-The runtime screen says:
+The installer validates URL structure, not playlist existence or playback rights. Share/index/time parameters are removed from scheduled playlist URLs. Skipping a task does not disable or remove an existing task; use Task Scheduler for that.
 
-```text
-Maximum runtime is a DURATION, not the time of day to stop.
-Examples: 3 = 3 hours; 1.5 or 1:30 = 90 minutes; 45 min = 45 minutes.
-Maximum runtime [Enter = 3]:
-```
+## Listening modes
 
-### Sample URLs, also available for copying
+### Default: continuous long mixes with smarter starting points
 
-**Morning Music:**
+Sampling is off. Every eligible long recording gets a start within 0%-75%, favoring less-recently-played parts of **that same recording**, and then continues until it ends or playback is stopped. The script checks every half-second for forward playback and periodically saves the intervals it observed.
 
-```text
-https://www.youtube.com/playlist?list=PLZAsCc2NQgn0
-```
+For example, it can remember `Classical mix: 42:37-68:10` and prefer a different portion next time. The old ten-percentage log is still retained, but it is no longer the only source of variety. Existing track-start logs cannot reconstruct past listening intervals; the new history builds from this update onward.
 
-**Day Finisher:**
+**This is a preference, not a guarantee of zero repeated audio.** Selection compares a fixed look-ahead window (normally up to 20 minutes), with recently heard overlap penalized more than older overlap. A sufficiently short recording uses a shorter equal-sized window so all 0%-75% candidates are comparable. Starts are selected on a one-percentage-point grid, excluding the recent percentage values. Continuous playback can eventually overlap a section heard previously.
+
+### Optional: sample a section, then move on
+
+Create this file using Notepad's **Save as type: All files**:
 
 ```text
-https://www.youtube.com/playlist?list=PLBejJIaDgbyQ
+C:\MPV\portable_config\script-opts\random-start.conf
 ```
 
-Do not add `--shuffle` or other command-line options at the installer prompt; the installer supplies them. Selecting **S** is optional and is shown in the final review before saving. To change an existing task rather than reinstall, follow [the existing-task instructions](EXAMPLE-PLAYLISTS.md#using-these-links-on-an-already-configured-computer).
+Create the `script-opts` folder if needed. Paste:
 
-The installer normalizes a YouTube URL containing a playlist ID to its playlist URL, removing `si=`, `t=`, and other share/watch parameters. URL-format validation is not a check that the playlist exists or is playable.
-
-Leaving a task's playlist blank **does not delete or disable an existing task** with that name. It leaves that task unchanged. To stop an old task, use Task Scheduler to disable it.
-
-All times use the computer's local clock. If today's selected start time has already passed, the task waits until the next selected day; use **Run** in Task Scheduler for an immediate test. Retries, delays and interruptions can alter the actual stop time.
-
-## Failed setup / installing again
-
-Close the old failed installer before retrying. Download the current repository ZIP and extract it again. Alternatively, replace only `Install.ps1` in your previously extracted project folder with the updated file; keep it beside the original `INSTALL.cmd` and `payload` folder. Do not put the setup helper in `C:\MPV` unless the matching payload is there too.
-
-An earlier failed installer may already have written an incomplete audio ID into `mpv.conf`. The current guided setup ignores that config while listing devices, then writes the correctly selected ID when you approve.
-
-Before replacing files, guided setup makes a timestamped backup in:
-
-```text
-C:\MPV\setup-backups\YYYYMMDD-HHMMSS-fff\
+```ini
+section_mode=yes
+section_min_minutes=20
+section_max_minutes=40
+fade_seconds=5
 ```
 
-It backs up the existing `mpv.conf`, project files it will replace, matching scheduled tasks as XML, and existing matching desktop shortcuts. It does not overwrite playback-history files. A warning identifies other root-level tasks that launch `C:\MPV\mpv.exe`; those tasks are left unchanged, so check for duplicate schedules.
+Restart MPV. Each eligible recording now gets an independently chosen **20-40 minutes of forward, unmuted playback**, or its remaining duration if shorter, followed by a fade-out and the next playlist item. Pauses, buffering and detected seeks do not consume the listening allowance. A normal song under 20 minutes still plays normally. Set `section_mode=no` to return to continuous mode.
 
-The installer keeps unexpected error messages visible and writes details to a timestamped `MPV-Radio-Setup-error-*.txt` in your Windows temporary folder. The exact path is displayed. It does not perform an automatic rollback after a partial installation; the error screen identifies tasks already saved and the backup location. Keep backups and error logs private.
+The settings are read from the config file when MPV starts. They are not a new installer question. A commented template is provided at `payload/portable_config/script-opts/random-start.conf.example`; the installer does not copy this optional template automatically. Copy/rename it yourself only when configuring these options.
 
-## Scheduled-task behavior
+For just one scheduled task, append `--script-opts-append=random-start-section_mode=yes` to that task's MPV arguments instead. This lets morning stay continuous and the day-finisher sample sections, or vice versa. Do not add `--load-scripts=no` to a scheduled radio task.
 
-The helper creates or updates `Music - Morning` and/or `Music - Day Finisher`, only after approval. It builds two actions: first close accessible mpv.exe processes, then run:
+The fade is an MPV volume ramp, **not an overlapping crossfade**. Volume is restored before the next track; an intervening manual volume adjustment is respected. Network loading can leave a gap. Task Scheduler's forced runtime stop does not receive this fade. Finite playlist-loop counts are not managed by the sampler; use the documented `--loop-playlist=inf` radio workflow or a non-looping playlist.
 
-```text
-C:\MPV\mpv.exe --shuffle --loop-playlist=inf "YOUR_PLAYLIST_URL"
+## History, privacy and limits
+
+All histories stay on this PC under `C:\MPV\portable_config`; they are not uploaded or synchronized.
+
+| File | Purpose |
+| --- | --- |
+| `recent-track-history.txt` | Last 10 accepted starts: timestamp, video ID and title. Not proof a song finished. |
+| `random-start-history.txt` | Last 10 selected long-track percentages. |
+| `heard-sections.txt` | Estimated played ranges, recording ID, duration, last-heard time and title; final column is readable `minutes:seconds-minutes:seconds`. |
+| `heard-sections.txt.bak` | Previous complete section checkpoint, used for recovery. |
+
+The recent-track exclusion window is separate from history retention: at most five recent starts, reduced using the number of **unique** videos so small/duplicate-filled playlists remain playable. This is not yet a persistent shuffle bag of all unplayed songs.
+
+Section history skips paused, buffering, muted and detected seek gaps, and refuses to bridge long timer gaps such as computer sleep. It estimates **player activity**, not human attention or physical sound output; silent media or a powered-off external speaker cannot be detected reliably. Precision is roughly the polling interval, not sample-accurate audio measurement.
+
+Section history checkpoints every **15 seconds** by default and at normal file transitions/shutdown. A force-kill can lose the unsaved tail (normally up to a checkpoint interval, potentially longer during blocked execution or write failures). Complete files are rotated through a backup. One player must own the histories: concurrent writers are unsupported.
+
+By default the section log retains up to **40 intervals per recording**, **2,000 overall**, and **180 days**. Recent overlap uses a **14-day half-life**; these are configurable in the template. Large changes to a recording's duration make old offsets ineligible for selection, rather than assuming an edited timeline still matches. Unknown-duration/non-seekable streams are left to ordinary MPV playback.
+
+## Update an existing working computer
+
+For this radio-engine update, **do not rerun the installer or recreate tasks**:
+
+1. Close MPV. Back up your existing Lua file **outside** `portable_config\scripts`.
+2. Copy the repository's `payload\portable_config\scripts\random-start.lua` over `C:\MPV\portable_config\scripts\random-start.lua`.
+3. Keep both existing history files and your `mpv.conf`. Restart playback. New section history appears after qualifying playback is observed.
+4. Only to enable sampling, create the optional `script-opts\random-start.conf` described above.
+
+Do not leave two active radio `.lua` files in the scripts directory. No changes to your speaker, sample playlists, task times, or runtime limits are required.
+
+## Scheduler, safeguards and troubleshooting
+
+Tasks use two actions: stop accessible `mpv.exe` processes, then launch `C:\MPV\mpv.exe --shuffle --loop-playlist=inf "PLAYLIST_URL"`, with `C:\MPV` as the working directory. Starting a scheduled session currently closes accessible manual MPV windows too; this is not isolated IPC control.
+
+Tasks request wake-to-run, require the selected user to stay logged in (locked is okay), retry failures every five minutes up to three times, reject a duplicate instance of the same task, and stop at the chosen runtime. Missed-start catch-up is off. The speaker must be connected; wake timers/hardware must permit waking. A powered-off PC is not started by Task Scheduler. AC-power conditions are retained; review them on laptops.
+
+Setup backs up replaced files, matching tasks and shortcuts under `C:\MPV\setup-backups`. It warns about other MPV tasks but leaves them unchanged. Unexpected errors remain visible with a log path in the Windows temporary folder; partial installation has **no automatic rollback**. Keep backups/private logs out of public repositories.
+
+Useful commands in Command Prompt:
+
+```bat
+C:\MPV\mpv.com --no-config --load-scripts=no --audio-device=help
+C:\MPV\yt-dlp.exe --version
+C:\MPV\yt-dlp.exe -U
 ```
 
-The working directory is `C:\MPV`. Tasks use the launching user's interactive session with limited privileges: a locked screen is okay, signing out is not. Settings request wake-to-run, retries every 5 minutes up to 3 times for task failures, no duplicate instance of the same task, and the selected maximum runtime. Missed-start catch-up is off. AC-power restrictions are retained; review them on a laptop. A wake request still depends on Windows/hardware support and enabled wake timers. Task Scheduler cannot start a fully shut-down PC.
+Use the complete detected `wasapi/{GUID}` in `mpv.conf`, not the GUID alone, when configuring manually. Enable File Explorer's **File name extensions**; avoid `mpv.conf.txt`, `random-start.lua.txt` and `random-start.conf.txt`. Keep the default Windows output on your normal headset if the music uses a separate speaker.
 
-**Starting either scheduled task closes accessible MPV windows, including manually opened MPV videos.** This is current behavior, not single-instance IPC control. Morning/evening schedules should not overlap unless taking over playback is intended.
+MPV and yt-dlp remain upstream dependencies. For extraction failures follow [yt-dlp's current guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS), including a supported JavaScript runtime when required. This installer does not install that runtime. Upstream/network/region restrictions can still interrupt YouTube playback.
 
-## MPV configuration and radio behavior
+## Development and attribution
 
-The helper writes `C:\MPV\portable_config\mpv.conf`:
+See the tests and workflows for reproducible checks. Section tests simulate MPV events and file errors; a headless smoke test uses generated local media, not YouTube or a physical speaker. Windows tests validate installer inputs and that the complete Lua code in the manual matches the shipped file.
 
-```text
-audio-device=YOUR_SELECTED_DEVICE
-vid=no
-ytdl-format=bestaudio/best
-force-window=yes
-```
-
-The script at `C:\MPV\portable_config\scripts\random-start.lua` retains the last **10 accepted track starts**, independently of playlist size. It leaves tracks under 20 minutes unseeked and chooses a 0%-75% random start for longer tracks. The separate percentage history avoids the last ten exact random percentages and tries to stay at least six percentage points from the previous percentage.
-
-### Track history is not a ten-song blacklist
-
-History records what started playing. Repeat protection considers up to the most recent five starts, and shrinks for small playlists according to the number of unique video IDs. With four distinct tracks it protects the last two rather than blocking three and forcing a fixed cycle. With two tracks it can alternate; with one it allows repeats. Duplicate playlist rows do not count as extra choices. History still retains ten starts in all of those cases.
-
-This remains a recent-track filter plus MPV shuffle, not a complete persistent shuffle-bag implementation. Entries skipped automatically by the repeat filter are not counted as played. An accepted track is recorded when loaded, even if you later stop or manually skip it; this is not a completed-listen or audible-listening-duration log. Manual launchers with `--load-scripts=no` do not participate in this history.
-
-History files:
-
-```text
-C:\MPV\portable_config\random-start-history.txt
-C:\MPV\portable_config\recent-track-history.txt
-```
-
-New track-history rows use this format:
-
-```text
-YYYY-MM-DD HH:MM:SS|youtube:VIDEO_ID|Track title
-```
-
-The oldest retained row is at the top; the newest is at the bottom. Short songs and long mixes both count. The file builds up to ten rows as tracks start, then drops the oldest row on each new start. It is local to this PC and shared by its morning/evening radio sessions, not synchronized with GitHub or another PC.
-
-Old two-column rows are loaded automatically. Existing timestamps are preserved as stored, and new timestamps are captured once per start rather than being replaced whenever the file is rewritten. The update cannot reconstruct titles/times or entries discarded by an earlier version. Title columns for old rows may remain blank. Keep only one active radio Lua script and avoid multiple simultaneous players writing the same files.
-
-To retain more than ten starts, increase `TRACK_HISTORY_SIZE` in the script; this does not enlarge the repeat-blocking window. The default remains ten.
-
-### Update only the radio script on a working computer
-
-Close MPV. Back up the old Lua file outside `portable_config\scripts` (or use a non-`.lua` backup extension). Copy the new repository file `payload\portable_config\scripts\random-start.lua` over `C:\MPV\portable_config\scripts\random-start.lua`, keeping that exact filename, then restart playback. Do not keep two active `.lua` versions. Keep both history files; migration is automatic. No installer rerun or Task Scheduler changes are needed for this script-only upgrade.
-
-## Manual launchers
-
-**Play YouTube on MPV Audio.cmd:** copy a YouTube URL, then double-click the launcher in `C:\MPV` or its desktop shortcut. Existing MPV playback stops and audio uses the configured device. The radio/random-start script is disabled for this manual playback.
-
-**Play YouTube Video - 720p Best Audio Always On Top.cmd:** copy a link and open the video launcher. It opens a resizable always-on-top window, limits video to 720p or lower, and selects best available audio independently. MPV and yt-dlp handle separate audio/video streams. Radio scripts are disabled here too.
-
-## Updating and troubleshooting
-
-For YouTube failures, check `C:\MPV\yt-dlp.exe --version`, then use `C:\MPV\Update yt-dlp.cmd` to update from upstream. If extraction still fails, follow yt-dlp's current upstream guidance, including its JavaScript-runtime requirements; this installer does not install a JavaScript runtime.
-
-To update MPV, replace its program files with a newer appropriate build while retaining `portable_config` and the custom launchers. To inspect output IDs independently of configuration:
-
-```text
-C:\MPV\mpv.com --no-config --audio-device=help
-```
-
-If output IDs change, rerun guided setup or correct the `audio-device=` line. For ignored files, enable File Explorer's **File name extensions** option: use `mpv.conf`, not `mpv.conf.txt`; use `random-start.lua`, not `random-start.lua.txt`.
-
-For scheduler problems, verify the correct user is logged in, the selected speaker is powered/connected, wake timers permit waking, the task is enabled, and there is no duplicate older task. Test the selected output and a real playlist rather than relying only on successful installation.
-
-## Third-party software and disclaimer
-
-MPV and yt-dlp remain separate upstream projects and are not bundled here. See `THIRD_PARTY.md`. This project does not provide or redistribute music/video content. Users are responsible for permissions, licenses and service terms applicable to their listening or public playback.
+Project automation code uses the MIT license. See `THIRD_PARTY.md` for upstream licenses. Sample playlists are suggestions, not music distributed by the project or permission for public/commercial playback. Do not publish personal authentication files or listening logs.
 
 ## Alternative: set everything up manually (no installer)
 
-**[Open the complete manual setup guide](MANUAL-SETUP.md).** This is a separate installation method, not an extra step after running the installer.
-
-The guide walks through installing MPV and yt-dlp yourself, creating the same `C:\MPV` folders, finding your speaker's full device ID, saving `mpv.conf`, and pasting the **complete current `random-start.lua` code**. It includes both sample playlist links, the two exact Task Scheduler actions, separate Morning and Day Finisher schedules, runtime examples, optional clipboard launchers, testing, backups and troubleshooting.
-
-You can follow it without running `INSTALL.cmd` or `Install.ps1`. On a computer already configured by the installer, edit the existing tasks instead of creating duplicates.
+**[Open the complete manual setup guide](MANUAL-SETUP.md).** It includes the folder structure, audio device selection, `mpv.conf`, the **entire current Lua script**, optional sampling configuration, sample playlists, both Task Scheduler actions and testing steps. Use this instead of the installer, not as an additional installation that creates duplicate tasks.

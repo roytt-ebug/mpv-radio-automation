@@ -4,11 +4,12 @@ mpv.com
 yt-dlp.exe
 *.dll
 
-# Runtime histories
-portable_config/random-start-history.txt
-portable_config/recent-track-history.txt
-payload/portable_config/random-start-history.txt
-payload/portable_config/recent-track-history.txt
+# Runtime histories and local configuration; never publish personal listening logs
+**/random-start-history.txt
+**/recent-track-history.txt
+**/heard-sections.txt*
+**/script-opts/random-start.conf
+**/setup-backups/
 
 # Local archives/downloads
 *.7z

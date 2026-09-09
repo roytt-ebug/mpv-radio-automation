@@ -1,29 +1,39 @@
-name: Radio history tests
+name: Radio history and section tests
 on:
   push:
     paths:
       - 'payload/portable_config/scripts/random-start.lua'
       - 'tests/test-radio-history.lua'
+      - 'tests/test-radio-sections.lua'
+      - 'tests/test-mpv-sections-smoke.py'
       - '.github/workflows/radio-history-tests.yml'
   pull_request:
     paths:
       - 'payload/portable_config/scripts/random-start.lua'
       - 'tests/test-radio-history.lua'
+      - 'tests/test-radio-sections.lua'
+      - 'tests/test-mpv-sections-smoke.py'
       - '.github/workflows/radio-history-tests.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  lua-history:
+  lua-and-headless-mpv:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Install test interpreters
-        run: sudo apt-get update -qq && sudo apt-get install -y lua5.4 luajit
-      - name: Test history with Lua 5.4
-        run: lua5.4 tests/test-radio-history.lua
-      - name: Test history with LuaJIT
-        run: luajit tests/test-radio-history.lua
+      - name: Install test runtimes (not redistributed by project)
+        run: sudo apt-get update && sudo apt-get install -y lua5.4 luajit mpv
+      - name: Check Lua syntax
+        run: luac5.4 -p payload/portable_config/scripts/random-start.lua
+      - name: Test histories and section behavior on both Lua runtimes
+        run: |
+          lua5.4 tests/test-radio-history.lua
+          lua5.4 tests/test-radio-sections.lua
+          luajit tests/test-radio-history.lua
+          luajit tests/test-radio-sections.lua
+      - name: Exercise real MPV using generated local audio and a null output
+        run: python3 tests/test-mpv-sections-smoke.py

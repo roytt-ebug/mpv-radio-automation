@@ -1,0 +1,17 @@
+# OPTIONAL: copy to C:\MPV\portable_config\script-opts\random-start.conf
+# This .example file does not activate settings. Restart MPV after changes.
+# The recording eligibility threshold remains 20 minutes in random-start.lua.
+# Sampling is separate and OFF unless explicitly enabled below.
+section_mode=no
+section_min_minutes=20
+section_max_minutes=40
+fade_seconds=5
+
+# Look ahead up to this much source audio when scoring candidate starts.
+# The window is shortened to at most one quarter of the recording's duration.
+preference_window_minutes=20
+recency_half_life_days=14
+history_max_age_days=180
+history_max_intervals=2000
+history_per_recording=40
+checkpoint_seconds=15
