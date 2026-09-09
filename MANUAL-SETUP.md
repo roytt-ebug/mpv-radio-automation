@@ -2,61 +2,90 @@
 
 [Back to README](README.md)
 
-This is an **alternative to running the installer**, not an extra installation step. It creates scheduled background music with dedicated audio routing, ten-track history, smarter starting points for long recordings and section sampling through one player.
+Follow these steps **instead of running `INSTALL.cmd`**. You will create the configuration files, build the small launcher, and enter two schedules yourself. The result is the same single-player YouTube radio described in the README.
 
-For an earlier test installation, use the short [fresh-setup instructions](README.md#start-over-with-a-fresh-setup) if you want to start over. They reset settings and listening history. Use only one set of music tasks and keep script backups outside `portable_config\scripts`.
+This guide is for **Windows x64**. Use the Windows account that will play the music. For an earlier test installation, the [fresh-setup instructions](README.md#start-over-with-a-fresh-setup) explain how to reset it; that reset clears settings and listening history. Avoid creating duplicate music tasks.
 
-## 1. Install MPV and the YouTube helper separately
+## Before you begin: download this project's files
 
-Start at [mpv's installation page](https://mpv.io/installation/) and follow its Windows-build link. This project has used [Shinchiro](https://github.com/shinchiro/mpv-winbuild-cmake/releases). For Windows x64 choose `mpv-x86_64-...7z`; expand **Show all assets** when necessary. Do not select the `dev`, `i686`, or `aarch64` variant for an x64 installation.
+1. Open [the project repository](https://github.com/roytt-ebug/mpv-radio-automation).
+2. Choose **Code → Download ZIP**. Save the ZIP in Downloads.
+3. In File Explorer, right-click the downloaded ZIP and choose **Extract All**, then **Extract**.
+4. Open the extracted folder, normally `mpv-radio-automation-main`. Confirm that it contains `README.md`, `INSTALL.cmd`, and a folder named **`payload`**.
 
-Extract the **complete player archive** to `C:\MPV`, not just the executable. Do not run it inside WinRAR. No file-association registration is required for this project.
+Whenever this guide says **the project's `payload` folder**, it means the folder you just extracted. Leave it available; you will copy files from it in step 5. Do not run files from inside the ZIP.
 
-Get `yt-dlp.exe` from the [official yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases/latest) and put it beside `mpv.exe`. Use the appropriate x64 executable. It is a command-line helper; double-clicking it without a URL is not an installation test.
+**Notepad is the Windows text editor.** A configuration file starts as a blank document in Notepad; it becomes `mpv.conf`, `.lua`, or `.conf` when you save it with the specified name. The steps below show the folder and filename separately.
 
-Download `SHA2-256SUMS` from that **same release**. In PowerShell run `Get-FileHash -LiteralPath 'C:\MPV\yt-dlp.exe' -Algorithm SHA256` and compare the displayed hash with the entry named exactly `yt-dlp.exe`. They must match (hexadecimal letter case does not matter). Do not run a download whose checksum is missing or mismatched. The guided installer performs this comparison automatically only when downloading a missing yt-dlp; manual setup does not run that installer check. A checksum match is an integrity check against the published list, not a malware scan or signature verification.
+## 1. Prepare the MPV folder and YouTube helper
 
-**Deno is optional.** It can help yt-dlp handle YouTube's JavaScript checks. Follow the [Deno download table and instructions](README.md#optional-recommendation-deno) to choose the correct Windows ZIP. Extract `deno.exe` directly into `C:\MPV`, beside `mpv.exe` and `yt-dlp.exe`; do not run it from inside the archive. Restart MPV after adding it.
+### Create the destination folders
 
-Folder layout (`deno.exe` is optional):
+1. Press **Windows + E** to open File Explorer. Open **This PC → Local Disk (C:)**.
+2. Right-click an empty area, choose **New → Folder**, and name it **`MPV`**. If `C:\MPV` already exists, open it instead.
+3. Inside `C:\MPV`, create a folder named **`portable_config`**.
+4. Inside `portable_config`, create **two separate folders** named **`scripts`** and **`script-opts`**. Neither belongs inside the other. Use any of these folders that already exist.
+5. Show complete filenames: on Windows 11 choose **View → Show → File name extensions**; on Windows 10 select **View → File name extensions**.
 
-```text
-C:\MPV\
-    mpv.exe
-    mpv.com
-    yt-dlp.exe
-    deno.exe          (optional recommendation)
-    Radio.ps1
-    Radio-Hidden.cs
-    Build-HiddenStarter.ps1
-    Radio-Hidden.exe   (built locally in step 5)
-    Check-Radio.ps1
-    Check Radio.cmd
-    Stop Radio.cmd
-    ...other files from the MPV build...
-    portable_config\
-        mpv.conf
-        scripts\
-            random-start.lua
-        script-opts\
-            random-start.conf    (active sampling settings)
+| Folder that should now exist | What will go there |
+| --- | --- |
+| `C:\MPV` | MPV, yt-dlp, and this project's launcher files. |
+| `C:\MPV\portable_config` | The player configuration you create in step 3; histories appear later automatically. |
+| `C:\MPV\portable_config\scripts` | The Lua script you save in step 4. |
+| `C:\MPV\portable_config\script-opts` | Sampling settings you save in step 5. |
+
+### Download and extract MPV
+
+Start at [MPV's installation page](https://mpv.io/installation/) and follow its Windows-build link. This project uses [Shinchiro Windows builds](https://github.com/shinchiro/mpv-winbuild-cmake/releases). For Windows x64 choose `mpv-x86_64-...7z`, without `dev`, `i686`, or `aarch64` in its name. Expand **Show all assets** if needed.
+
+Extract the **entire archive** using Windows' extraction option or an archive program that supports `.7z`. Put its contents directly in `C:\MPV`. Keep all accompanying files. If extraction creates an extra folder, move its contents up so File Explorer shows **`C:\MPV\mpv.exe`** and **`C:\MPV\mpv.com`**, not `C:\MPV\another-folder\mpv.exe`. No file-association registration is needed.
+
+### Download and verify yt-dlp
+
+1. Open the [official yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases/latest).
+2. From **the same release**, download **`yt-dlp.exe`** and **`SHA2-256SUMS`**. Move `yt-dlp.exe` into `C:\MPV`; the checksum file can stay in Downloads. If Windows hides some assets, expand the list.
+3. Open **Notepad** from the Windows Start menu. Choose **File → Open**, browse to Downloads, select **All files** in the file-type filter, and open `SHA2-256SUMS`.
+4. Find the line whose filename is exactly **`yt-dlp.exe`**. The long hexadecimal value on that line is its expected checksum.
+5. In File Explorer open `C:\MPV`, click the address bar at the top, type **`cmd`**, and press **Enter**. This opens **Command Prompt** in that folder.
+6. Paste this entire command into Command Prompt and press Enter:
+
+```bat
+powershell.exe -NoProfile -Command "(Get-FileHash -LiteralPath 'C:\MPV\yt-dlp.exe' -Algorithm SHA256).Hash"
 ```
 
-Create missing folders in File Explorer. Turn on **View -> File name extensions** (on Windows 11: View -> Show -> File name extensions).
+Compare all 64 characters displayed with the checksum from step 4 above; uppercase/lowercase does not matter. **Continue only if they match.** If they do not, discard the downloaded `yt-dlp.exe` and obtain it and its checksum again from the same official release. A checksum checks download integrity; it is not a malware scan.
 
-## 2. Find the output device
+You can close the checksum document without saving it. Do not double-click `yt-dlp.exe` to test installation; it is a helper used by MPV.
 
-In File Explorer open `C:\MPV`, click the address bar, type `cmd`, and press Enter. In Command Prompt run:
+**Optional Deno:** follow the [download-selection table](README.md#optional-recommendation-deno) if you want to add it. Extract `deno.exe` directly into `C:\MPV`, beside `mpv.exe` and `yt-dlp.exe`. You can continue without Deno.
+
+**Check before continuing:** `mpv.exe`, `mpv.com`, and the verified `yt-dlp.exe` are directly in `C:\MPV`; the three configuration folders listed above exist. You have not created the configuration files yet.
+
+## 2. Find and copy your speaker's device ID
+
+1. Turn on and connect the speaker you want the music to use.
+2. In File Explorer open `C:\MPV`, click the address bar, type **`cmd`**, and press Enter. If your Command Prompt from step 1 is still open there, you can use it.
+3. Run:
 
 ```bat
 mpv.com --no-config --load-scripts=no --audio-device=help
 ```
 
-Use `mpv.com` for console diagnostics. Copy the **entire ID** for your chosen music speaker, for example `wasapi/{11111111-2222-3333-4444-555555555555}`. That is an example, not a working device ID. Do not copy only the number inside braces or the descriptive speaker name. Leave Windows' default output on your normal headset when keeping music separate.
+Find your speaker in the displayed list. Copy its **complete device ID**. It may look like:
 
-## 3. Save the player configuration
+```text
+wasapi/{11111111-2222-3333-4444-555555555555}
+```
 
-In Notepad paste:
+That is only an example. Copy the ID for **your** speaker, including `wasapi/` and the braces. Do not copy the descriptive speaker name or surrounding quotation marks. You can select the ID in the terminal and use **Ctrl+C** to copy it. Keep this window open so you can refer back to the list.
+
+**Check before continuing:** you have your actual device ID ready to paste into the next step. If the speaker is missing from the list, reconnect it and run the command again first.
+
+## 3. Create and save the player configuration
+
+1. Open the Windows **Start** menu, type **Notepad**, and open it.
+2. Choose **File → New** (or **New tab**) to get a blank document. You do not need to create a file in File Explorer first.
+3. Paste these four lines into the blank document:
 
 ```ini
 audio-device=PASTE_YOUR_COMPLETE_DETECTED_DEVICE_ID_HERE
@@ -65,13 +94,35 @@ ytdl-format=bestaudio/best
 force-window=yes
 ```
 
-Replace the placeholder with your full detected ID. Use **File -> Save As**, choose **All files**, and save exactly `C:\MPV\portable_config\mpv.conf`, not `mpv.conf.txt`. This preserves a visible MPV control window for radio playback.
+4. On the first line, replace only `PASTE_YOUR_COMPLETE_DETECTED_DEVICE_ID_HERE` with the device ID from step 2. Keep `audio-device=` at the beginning. Leave the other three lines as shown.
+5. Choose **File → Save As**. Click the folder/address bar in the save window, enter **`C:\MPV\portable_config`**, and press Enter to open that folder.
+6. Complete the save fields as follows, then click **Save**:
 
-## 4. Save the radio Lua script
+| Save As field | Enter or select |
+| --- | --- |
+| Folder | `C:\MPV\portable_config` |
+| File name | `mpv.conf` |
+| Save as type | **All files** (`*.*`) |
+| Encoding | **UTF-8** |
 
-Save the **complete code below** in Notepad as `C:\MPV\portable_config\scripts\random-start.lua`, with **All files** selected. Do not include the Markdown backticks. Alternatively, copy [the source file](payload/portable_config/scripts/random-start.lua) to that location.
+**Check before continuing:** open `C:\MPV\portable_config` in File Explorer. The file must be named **`mpv.conf`**, not `mpv.conf.txt`. Reopen it in Notepad and check that the placeholder has been replaced with your device ID. These settings keep MPV's controls visible while playing audio.
 
-Short tracks under 15 minutes are not randomly seeked. Longer seekable recordings favor less-recently-played portions within 0%-75%. Ten accepted starts and ten selected percentages persist. Section history records playback after installation; old percentage logs cannot reconstruct previously heard intervals. Sampling restricts candidate starts so the selected allowance fits.
+## 4. Create and save the radio Lua script
+
+The Lua script supplies the recent-track history, smart starting points, and section sampling. You do not need to understand or edit its code to use it.
+
+1. In Notepad choose **File → New** or **New tab** for a **separate blank document**. Do not paste over `mpv.conf`.
+2. Expand **Show the complete Lua script to copy** below. Copy all the code inside the code block and paste it into the blank document. Do not include the three backtick characters used to mark a code block.
+3. Choose **File → Save As**, open the folder below through the save window's address bar, and save with these fields:
+
+| Save As field | Enter or select |
+| --- | --- |
+| Folder | `C:\MPV\portable_config\scripts` |
+| File name | `random-start.lua` |
+| Save as type | **All files** (`*.*`) |
+| Encoding | **UTF-8** |
+
+Alternatively, copy the existing `random-start.lua` from the extracted project's **`payload\portable_config\scripts`** folder into **`C:\MPV\portable_config\scripts`**. Either method supplies the same file; use only one copy.
 
 <details>
 <summary>Show the complete Lua script to copy</summary>
@@ -729,19 +780,41 @@ end)
 
 </details>
 
-## 5. Copy the launcher and sampling settings
+**Check before continuing:** `C:\MPV\portable_config\scripts\random-start.lua` exists and is not named `random-start.lua.txt`. Its contents should match the complete supplied script. Keep any backup copies outside the `scripts` folder.
 
-Copy `Radio.ps1`, `Radio-Hidden.cs`, `Build-HiddenStarter.ps1`, `Check-Radio.ps1`, `Check Radio.cmd`, and `Stop Radio.cmd` from `payload` into `C:\MPV`. This launcher opens **one MPV** with visible playback controls. Windows PowerShell 5.1 and its existing .NET Framework are sufficient.
+## 5. Copy the launcher files and create sampling settings
 
-Build the hidden starter once, from PowerShell or Command Prompt:
+### Copy the files prepared at the beginning
 
-```text
+Open the extracted project's **`payload`** folder in one File Explorer window and **`C:\MPV`** in another. Copy the following files from `payload` directly into `C:\MPV`:
+
+| File to copy | Purpose |
+| --- | --- |
+| `Radio.ps1` | Starts/stops the radio and enforces the session duration. |
+| `Radio-Hidden.cs` | Source code for the helper that prevents the extra terminal window. |
+| `Build-HiddenStarter.ps1` | Builds that helper using Windows PowerShell and .NET. |
+| `Check-Radio.ps1` | Checks whether MPV and the Lua script respond. |
+| `Check Radio.cmd` | Opens the check above when double-clicked. |
+| `Stop Radio.cmd` | Stops this installation's radio. |
+
+Copy the **files themselves**, not an extra `payload` folder. In `C:\MPV`, confirm that these six files now appear beside `mpv.exe`.
+
+### Build the hidden-start helper
+
+In File Explorer open `C:\MPV`, click the address bar, type **`cmd`**, and press Enter. Run this command in the resulting **Command Prompt**:
+
+```bat
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\MPV\Build-HiddenStarter.ps1"
 ```
 
-This creates `C:\MPV\Radio-Hidden.exe` without downloads. It starts the PowerShell supervisor without creating a console, waits for it, and returns its exit code. MPV's playback window stays available. The build refuses to overwrite an existing helper; stop playback and move that executable into your backup before rebuilding. If compilation or execution is blocked by security policy, stop and report it; do not disable protection. The guided installer performs this build and backup automatically after confirmation.
+The command uses **Windows PowerShell 5.1** and Windows' existing .NET Framework. It creates **`C:\MPV\Radio-Hidden.exe`**; you do not need to download an executable or install developer tools.
 
-Create `C:\MPV\portable_config\script-opts\random-start.conf` with:
+**Check before continuing:** the command reports `Built hidden starter: C:\MPV\Radio-Hidden.exe`, and that file appears in File Explorer. If the helper already exists, the build refuses to replace it: stop the radio and move that helper into a backup folder before rebuilding. If antivirus or another policy blocks the build or file, record the exact message; do not disable protection.
+
+### Create the sampling-settings file
+
+1. Open **Notepad → File → New** (or **New tab**) to get another blank document.
+2. Paste these five lines:
 
 ```ini
 section_mode=yes
@@ -751,82 +824,207 @@ section_max_minutes=30
 fade_seconds=5
 ```
 
-See the [defaults and allowed limits](README.md#defaults-and-adjustable-limits) before choosing different values. Use Notepad's **All files** save type. `section_mode=no` turns off sampling. `fade_seconds=0` turns off the simple fade-out before the next sample; there is no overlap between tracks. Restart MPV after editing. The sample allowance is capped to the source length and the start leaves room for it.
+3. Choose **File → Save As**, open the folder below through the save window's address bar, and save:
 
-## 6. Test playback and the loaded script
+| Save As field | Enter or select |
+| --- | --- |
+| Folder | `C:\MPV\portable_config\script-opts` |
+| File name | `random-start.conf` |
+| Save as type | **All files** (`*.*`) |
+| Encoding | **UTF-8** |
 
-In Command Prompt run:
+**Check before continuing:** `random-start.conf` is in **`script-opts`**, while `random-start.lua` is in **`scripts`**. Neither ends in `.txt`.
+
+These defaults sample 10–30 minutes from eligible recordings at least 15 minutes long, shortened when the recording cannot supply the full allowance. `section_mode=no` turns sampling off while keeping smart starting points. `fade_seconds=0` turns the sample fade-out off. See the [defaults and adjustable limits](README.md#defaults-and-adjustable-limits) before changing values. Restart MPV after any later changes.
+
+### Confirm the required files are in place
+
+| Location | Files that must now be present |
+| --- | --- |
+| `C:\MPV` | `mpv.exe`, `mpv.com`, `yt-dlp.exe`, the six copied launcher/check files, and the newly built `Radio-Hidden.exe`. |
+| `C:\MPV\portable_config` | `mpv.conf` |
+| `C:\MPV\portable_config\scripts` | `random-start.lua` |
+| `C:\MPV\portable_config\script-opts` | `random-start.conf` |
+
+Keep all other files from the MPV build. `deno.exe` is optional. **Do not create history files yourself**; the Lua script creates them during playback.
+
+## 6. Test playback before creating the schedules
+
+Open **Command Prompt** in `C:\MPV` using File Explorer's address bar as above. Paste the entire command below and press Enter:
 
 ```bat
 "C:\MPV\Radio-Hidden.exe" -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 180
 ```
 
-There should be one MPV window. Press **F8** in it for the Lua version and settings. Open **Check Radio.cmd** for a live MPV/Lua acknowledgement: one PASS with sampling enabled, cutoff `15`, and range `10` to `30`. Listen for the selected speaker. A three-minute session checks startup and stopping; it is shorter than the normal sample allowance.
+This uses the Morning sample playlist for a **three-minute test**. You may replace the URL inside the quotes with your own complete YouTube playlist URL. Keep the quotes and `-DurationSeconds 180`.
 
-MPV controls: **Space** pauses, **>** selects the next playlist entry, **9/0** adjusts volume and **Q** quits. `Stop Radio.cmd` also stops the scheduled radio. Pauses count toward the total session duration but not the section's listening allowance.
+1. Allow time for YouTube to load. Confirm that **one MPV window** opens and music comes from your chosen speaker. The Command Prompt you opened yourself may remain; scheduled starts will not open that window.
+2. Click inside MPV and press **F8**. It should show the loaded radio script and the default settings: cutoff **15**, sampling **on**, range **10–30**.
+3. While music is playing, use File Explorer to double-click **`C:\MPV\Check Radio.cmd`**. A separate diagnostic window should report **PASS** when the player and script respond. It pauses so you can read the result; press a key to close it.
+4. Let the three-minute test finish and confirm MPV closes. To stop early, press **Q in MPV** or double-click **`C:\MPV\Stop Radio.cmd`**.
 
-Histories remain in `portable_config`: ten accepted starts in `recent-track-history.txt`, ten starting percentages in `random-start-history.txt`, and estimated played ranges in `heard-sections.txt`. A normal stop saves sections; force-kills may lose the latest unsaved portion. Do not run another radio script against these files simultaneously.
+This short test checks startup, controls, the speaker, and stopping. It does **not** reach the normal 10–30-minute sample transition; test that during a longer session in step 9.
+
+**Check before continuing:** playback, F8, the diagnostic check, and stopping work. If any fails, use [troubleshooting](#10-optional-shortcuts-and-troubleshooting) before adding schedules.
 
 ## 7. Create the Morning task manually
 
-Open **Task Scheduler → Create Task**. Use one task for each schedule; avoid duplicates.
+### Open Task Scheduler and set the account
 
-On **General**, name it **Music - Morning**, select the intended Windows user, choose **Run only when user is logged on**, and leave **Run with highest privileges** unchecked.
+1. Open Windows **Start**, search for **Task Scheduler**, and open it.
+2. Select **Task Scheduler Library** in the left pane. This is where you will save the task.
+3. In the right-hand **Actions** pane, click **Create Task**. Choose this rather than **Create Basic Task**, so all the tabs below are available.
+4. On **General**, enter:
 
-On **Triggers**, create a weekly trigger at **06:45**, every one week, Monday-Saturday. These are suggestions: choose your own days and local clock time.
+| Field | Value |
+| --- | --- |
+| Name | `Music - Morning` |
+| When running the task, use the following user account | The Windows account that successfully played music in step 6. Use **Change User or Group** if a different account is shown. |
+| Run only when user is logged on | Selected. |
+| Run with highest privileges | Unchecked. |
 
-On **Actions**, create exactly one **Start a program** action:
+Keep the Create Task window open as you move through the tabs.
 
-**Program/script:**
+### Add the weekly trigger
+
+On **Triggers**, click **New** and enter:
+
+| Field | Value |
+| --- | --- |
+| Begin the task | On a schedule. |
+| Schedule | Weekly. |
+| Start date | Today, or the first date you want this schedule to apply. |
+| Start time | `06:45` (6:45 AM); check the AM/PM display if Windows uses it. |
+| Recur every | `1` week. |
+| Days | Monday, Tuesday, Wednesday, Thursday, Friday, Saturday. |
+| Enabled | Checked. |
+
+Leave **Repeat task every** and the trigger's **Stop task if it runs longer than** unchecked. The whole-task limit is configured under Settings below. Click **OK** to save the trigger and return to Create Task.
+
+### Add the launcher action
+
+On **Actions**, click **New**. Select **Start a program**, then fill the three fields **separately**:
+
+**Program/script — paste this path:**
 
 ```text
 C:\MPV\Radio-Hidden.exe
 ```
 
-**Add arguments:**
+**Add arguments — paste this entire line:**
 
 ```text
 -Playlist "https://www.youtube.com/playlist?list=PLZAsCc2NQgn0" -DurationSeconds 10800
 ```
 
-**Start in:**
+**Start in — paste this folder path:**
 
 ```text
 C:\MPV
 ```
 
-Build the helper in step 5 before saving this action. This task needs only the one action shown above.
+These are Task Scheduler fields, not commands to run in a terminal. Keep the quotation marks around the playlist URL, and do not put the arguments into Program/script. Click **OK**. The Actions list should contain exactly **one** action.
 
-**Maximum runtime is a DURATION, not the time of day to stop.** `10800` seconds = three hours, `5400` = 90 minutes, `2700` = 45 minutes. The runtime includes loading and pauses. The launcher and Lua both enforce it across track changes. The installer accepts numbers in hours only, up to 24: `1`, `1.5`, `11.5`, or `24`. Manual task arguments still use seconds: multiply the hours by 3600; the maximum is `86400` seconds.
+**Maximum runtime is a DURATION, not the time of day to stop.** Manual task arguments use **seconds**. Choose a row below and replace only the number after `-DurationSeconds` if you want a different duration:
 
-On **Conditions**, enable **Wake the computer to run this task**. Leave the usual AC-power conditions enabled unless you deliberately want battery playback.
+| Desired session | `-DurationSeconds` value |
+| --- | --- |
+| 45 minutes | `2700` |
+| 1 hour | `3600` |
+| 1 hour 30 minutes | `5400` |
+| 3 hours (the example) | `10800` |
+| 24 hours (maximum) | `86400` |
 
-On **Settings**, allow on-demand execution, leave missed-start catch-up off, retry failures every **5 minutes**, at most **3** attempts, and select **Do not start a new instance**. Set the safety stop to **3 hours 1 minute** for the example above, with forced stopping enabled. The extra minute is for cleanup; `-DurationSeconds 10800` remains the intended three-hour duration.
+For other durations, multiply hours by **3600**. Pauses and loading count toward the session. The guided installer asks for hours instead; do not paste its `1.5` example into a manual seconds field.
+
+### Conditions and Settings
+
+On **Conditions**, check **Wake the computer to run this task**. Leave **Start the task only if the computer is idle** unchecked. Leave the normal AC-power conditions enabled unless you want the task to run on battery too.
+
+On **Settings**, use:
+
+| Setting | Value |
+| --- | --- |
+| Allow task to be run on demand | Checked. |
+| Run task as soon as possible after a scheduled start is missed | Unchecked. |
+| If the task fails, restart every | Checked; `5 minutes`. |
+| Attempt to restart up to | `3` times. |
+| Stop the task if it runs longer than | **3 hours 1 minute** (181 minutes) for the three-hour example. Set this to your selected session duration plus one minute. |
+| If the running task does not end when requested, force it to stop | Checked. |
+| If the task is already running, then the following rule applies | **Do not start a new instance**. |
+
+The extra minute allows shutdown and history saving; it does not extend music playback. The launcher and Lua enforce `-DurationSeconds`.
+
+Click **OK** at the bottom of Create Task to save it. If the chosen start time already passed today, the next automatic start will be on the next selected day.
+
+**Check before continuing:** **Music - Morning** appears in Task Scheduler Library, has one weekly trigger and one launcher action, and shows the expected **Next Run Time**. Use F5 to refresh the task list if necessary.
 
 ## 8. Create the Day Finisher task
 
-Repeat with name **Music - Day Finisher**, weekly at **15:45**, Monday-Friday, and these arguments:
+In **Task Scheduler Library**, choose **Create Task** again. Follow the same General, Triggers, Actions, Conditions, and Settings instructions from step 7, with these changes:
+
+| Item | Day Finisher value |
+| --- | --- |
+| Task name | `Music - Day Finisher` |
+| Start time | `15:45` (3:45 PM). |
+| Days | Monday, Tuesday, Wednesday, Thursday, Friday. |
+| Playlist URL in Add arguments | `https://www.youtube.com/playlist?list=PLBejJIaDgbyQ` |
+
+For the same three-hour duration, **Add arguments** must contain this complete line:
 
 ```text
 -Playlist "https://www.youtube.com/playlist?list=PLBejJIaDgbyQ" -DurationSeconds 10800
 ```
 
-Keep the same executable and working directory. A new radio session stops the previous radio for this installation before starting its one player. Unrelated MPV windows are left alone. Both schedules share history.
+Keep **Program/script** as `C:\MPV\Radio-Hidden.exe` and **Start in** as `C:\MPV`. Click **OK** to save the task.
+
+**Check before continuing:** both music tasks appear in Task Scheduler Library with their own playlist and intended schedule. A new radio session stops the previous radio session for this installation. The two schedules share listening history.
 
 ## 9. Test the saved tasks
 
-Right-click a task and choose **Run**, check F8/Check Radio, and listen. Then test a scheduled start a few minutes ahead, a locked-session start and wake-from-sleep. Restore the preferred schedule afterward. Windows must remain logged in and the speaker available; Task Scheduler cannot start a powered-off PC.
+1. In **Task Scheduler Library**, right-click **Music - Morning** and choose **Run**.
+2. Confirm that MPV opens with the intended playlist and speaker, without an extra scheduled-start terminal. Press **F8** and run **Check Radio.cmd** as in step 6.
+3. Double-click **Stop Radio.cmd**, then repeat the test for **Music - Day Finisher**.
+4. For a real scheduled-start test, open one task's **Properties → Triggers**, select the trigger, and click **Edit**. Note its original values. Temporarily include today's weekday and set the time a few minutes ahead. Click **OK** in both windows and confirm **Next Run Time** reflects that test.
+5. Leave Windows logged in and wait for the scheduled start. You can lock the screen with **Windows + L** to check locked-session playback. Afterward, restore the original trigger's date, time, and days and check Next Run Time again.
+6. During a longer session, listen through one 10–30-minute sample transition, then stop normally. Open `C:\MPV\portable_config` and confirm the history files have appeared. Short songs do not receive sampling cutoffs.
 
-YouTube loading can leave gaps. If the launcher is forcibly ended, the visible MPV may continue until Lua's session duration expires; use Q or Stop Radio to stop sooner. Normal stops save history. Hard shutdowns and write failures can lose unsaved checkpoints.
+For a sleep/wake test, repeat the temporary-trigger procedure, put the PC to sleep, and confirm whether it wakes and plays through the intended speaker. Wake behavior depends on Windows, power settings, and hardware. Restore the normal trigger afterward. A powered-off computer cannot be started by these tasks.
+
+History files are created automatically: `recent-track-history.txt` remembers ten accepted starts, `random-start-history.txt` remembers ten selected percentages, and `heard-sections.txt` records played ranges. A normal stop saves sections; forced shutdowns can lose the latest unsaved portion. Avoid running another radio script against the same files at the same time.
 
 ## 10. Optional shortcuts and troubleshooting
 
-For clipboard playback, copy `Play-YouTube.ps1` and both `Play YouTube ... .cmd` files from `payload` into `C:\MPV`. Create desktop shortcuts to the CMD files. Copy one YouTube URL and open the audio or video shortcut. It validates the link, stops this radio and opens manual playback with radio scripts disabled. Video is capped at 720p with best available audio and an always-on-top window. Copy `Update yt-dlp.cmd` if wanted.
+### Clipboard playback shortcuts
 
-For a fresh installation after an earlier test, follow the short [start-over instructions](README.md#start-over-with-a-fresh-setup). Hidden startup failures return a nonzero **Last Run Result** and, when the folder is writable, save the latest error to `C:\MPV\Radio-Hidden-error.log`. Check its date because a later successful run does not erase it.
+The project's extracted `payload` folder also contains:
 
-MPV provides the player controls, Lua runtime, seeking, shuffle, audio routing and [JSON IPC](https://mpv.io/manual/stable/#json-ipc). This project adds Windows schedules, history and section selection. See [THIRD_PARTY.md](THIRD_PARTY.md) for separately installed dependencies.
+| File to copy into `C:\MPV` | Purpose |
+| --- | --- |
+| `Play-YouTube.ps1` | Required helper for both clipboard shortcuts below. |
+| `Play YouTube on MPV Audio.cmd` | Play the copied YouTube link as audio. |
+| `Play YouTube Video - 720p Best Audio Always On Top.cmd` | Play the copied link as video, capped at 720p. |
+| `Update yt-dlp.cmd` | Update the YouTube helper when needed. |
 
+After copying the files, right-click each desired `.cmd` in `C:\MPV` and choose **Send to → Desktop (create shortcut)**. On Windows 11, choose **Show more options** first if Send to is not visible. Keep the original files in `C:\MPV`.
+
+To use a playback shortcut, copy one complete YouTube URL from your browser, then double-click the audio or video shortcut. It stops this installation's radio and opens normal manual playback without updating radio histories. Video stays on top. Command windows opened by manual shortcuts or diagnostics are separate from the hidden scheduled-start helper.
+
+### If a step fails
+
+| Problem | Check |
+| --- | --- |
+| Save As cannot find the folder | Return to step 1 and create the folders exactly as listed. |
+| A file ends in `.txt` | Reopen it in Notepad and use the matching Save As table with **All files** selected. Confirm the final name in File Explorer. |
+| A launcher file is missing | Return to step 5 and copy the six named files from the extracted project's `payload`, then build the helper. |
+| No music or wrong speaker | Recheck the actual device ID from step 2, MPV's volume, and the speaker connection. Restart MPV after editing `mpv.conf`. |
+| YouTube error | Check the URL/internet, run the optional `Update yt-dlp.cmd` copied above, and consider [Deno](README.md#optional-recommendation-deno). |
+| Task runs but no MPV appears | Check its **Last Run Result** and open `C:\MPV\Radio-Hidden-error.log` in Notepad if it exists. Check its timestamp; later success does not erase an earlier error. |
+| Antivirus message | Record the product name and full message; do not disable protection to complete a step. |
+
+If MPV remains after a forced task termination, close its window with **Q** or double-click **Stop Radio.cmd**. For a complete reset of an earlier test, use the [start-over instructions](README.md#start-over-with-a-fresh-setup), which explain the loss of settings/history.
+
+MPV supplies playback controls, seeking, shuffle, audio routing, and [JSON IPC](https://mpv.io/manual/stable/#json-ipc). This project adds schedules, history, and section selection. See [third-party software notes](THIRD_PARTY.md) for the separately obtained dependencies.
 
 <details>
 <summary>Technical notes: selection, history, and task behavior</summary>
