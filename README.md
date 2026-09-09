@@ -2,6 +2,8 @@
 
 A small Windows toolkit that turns MPV + yt-dlp into an automated YouTube background-music / radio system.
 
+Looking for music to try? See the [optional Day Finisher playlist recommendation](EXAMPLE-PLAYLISTS.md). It is not selected automatically; users still choose their own playlist URLs.
+
 ## What it does
 
 - Plays a shuffled YouTube playlist on a schedule, using a selected audio output.
