@@ -153,8 +153,8 @@ if ($env:OS -eq 'Windows_NT') {
     Assert-Equal $task.Settings.WakeToRun $true 'wake enabled'
     Assert-Equal $task.Settings.StartWhenAvailable $false 'missed-start catchup disabled'
     Assert-Equal $task.Settings.RestartCount 3 'restart count'
-    Assert-Equal $task.Settings.MultipleInstances 2 'duplicate task starts still ignored'
-    Assert-Equal $task.Principal.LogonType 3 'interactive user session retained for MPV controls'
+    Assert-Equal ([int]$task.Settings.MultipleInstances) 2 'duplicate task starts still ignored'
+    Assert-Equal ([int]$task.Principal.LogonType) 3 'interactive user session retained for MPV controls'
     Assert-Equal ([datetime]$task.Triggers[0].StartBoundary).ToString('HH:mm') '18:35' 'actual trigger time'
 }
 Write-Host "PASS: $script:checks checks. No tasks were registered and no music was played."
