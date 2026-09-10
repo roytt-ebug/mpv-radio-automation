@@ -33,7 +33,7 @@ Change session duration during setup. Change the other settings in the [sampling
 4. **Choose your speaker, playlists, and schedules** using the examples below. Review the summary and type **YES** to save.
 5. **Test a task:** open **Task Scheduler**, right-click **Music - Morning** or **Music - Day Finisher**, and choose **Run**. Confirm that MPV opens and music comes from the selected speaker.
 
-The installer is **revision 8**. It downloads yt-dlp only if missing, verifies the download's checksum, and builds the small `Radio-Hidden.exe` helper from included source. Deno is an [optional recommendation](#optional-recommendation-deno).
+The installer is **revision 9**. It downloads yt-dlp only if missing, verifies the download's checksum, and builds the small `Radio-Hidden.exe` helper from included source. Deno is an [optional recommendation](#optional-recommendation-deno).
 
 Setup backs up files and matching tasks it replaces in `C:\MPV\setup-backups`. Running setup again can reset custom playback settings; listening-history files are retained unless you delete them. If setup fails, it shows the failed step and an error-log location; it does not automatically undo completed changes.
 

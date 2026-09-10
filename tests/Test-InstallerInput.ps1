@@ -155,6 +155,8 @@ if ($env:OS -eq 'Windows_NT') {
     Assert-Equal $task.Settings.RestartCount 3 'restart count'
     Assert-Equal ([int]$task.Settings.MultipleInstances) 2 'duplicate task starts still ignored'
     Assert-Equal ([int]$task.Principal.LogonType) 3 'interactive user session retained for MPV controls'
+    Assert-Equal $task.Principal.UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) 'qualified listener account retained in definition'
+    Assert-Equal ([int]$task.Principal.RunLevel) 0 'playback still uses limited privileges'
     Assert-Equal ([datetime]$task.Triggers[0].StartBoundary).ToString('HH:mm') '18:35' 'actual trigger time'
 }
 Write-Host "PASS: $script:checks checks. No tasks were registered and no music was played."
