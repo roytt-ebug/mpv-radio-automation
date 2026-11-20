@@ -105,9 +105,12 @@ try {
     $powershell = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $scriptCopy + '" -Child -SetupPath "' + $setupCopy + '" -ResultPath "' + $result + '" -BackendTestsPath "' + $backendCopy + '"'
     $process = Start-Process -FilePath $powershell -Credential $credentials -LoadUserProfile -WorkingDirectory $root -ArgumentList $arguments -PassThru
+    # Cache the handle while the credentialed child is alive. Windows PowerShell
+    # can otherwise lose its exit status after WaitForExit and expose a null value.
+    $null = $process.Handle
     if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Standard-user installer test timed out.' }
     if (Test-Path -LiteralPath $result) { Get-Content -LiteralPath $result }
-    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $result)) { throw 'Standard-user package acceptance failed.' }
+    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $result)) { throw ('Standard-user package acceptance failed; child exit status: ' + [string]$process.ExitCode) }
 } finally {
     if ($userCreated) { Remove-LocalUser -Name $account -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
