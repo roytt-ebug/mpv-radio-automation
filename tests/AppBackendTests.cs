@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Principal;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Web.Script.Serialization;
 using System.Xml;
 using AutomaticMusic;
@@ -21,6 +23,13 @@ internal static class AppBackendTests
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--playback-only")
+            {
+                if (args.Length != 3) throw new ArgumentException("Supply --playback-only <appdir> <isolated component data root>.");
+                RunPlayback(args[1], args[2]);
+                Console.WriteLine("PASS: " + checks + " real MPV desktop-control checks; C# status, pause, resume, next and owned Stop; unrelated MPV survived.");
+                return 0;
+            }
             bool schedulerOnly = args.Length > 0 && args[0] == "--scheduler-only";
             if (schedulerOnly && args.Length != 2) throw new ArgumentException("Supply --scheduler-only <appdir>.");
             if (!schedulerOnly) RunCore();
@@ -260,6 +269,100 @@ internal static class AppBackendTests
             Check(!backend.GetComponentStatus().Ready, "receipt versions must agree with bundle ownership marker");
         }
         finally { Directory.Delete(work, true); }
+    }
+
+    private static void RunPlayback(string appDirectory, string componentDataRoot)
+    {
+        var paths = new AppPaths(appDirectory, componentDataRoot);
+        // This mode belongs to the component install test's unique temporary
+        // directory. Never repurpose a listener's existing player configuration.
+        if (Directory.Exists(paths.PlayerRoot)) throw new InvalidOperationException("Playback integration requires an isolated data root with no Player folder.");
+        var backend = new RadioBackend(paths);
+        ComponentStatus components = backend.GetComponentStatus();
+        Check(components.Ready, "real installed component receipt resolves in the desktop backend: " + components.Message);
+        string config = Path.Combine(paths.PlayerRoot, "portable_config");
+        Directory.CreateDirectory(config);
+        string first = Path.Combine(paths.PlayerRoot, "backend-first.wav"), second = Path.Combine(paths.PlayerRoot, "backend-second.wav");
+        string playlist = Path.Combine(paths.PlayerRoot, "backend-test.m3u");
+        Process supervisor = null, unrelated = null;
+        bool supervisorStarted = false;
+        var output = new StringBuilder();
+        try
+        {
+            File.WriteAllText(Path.Combine(config, "mpv.conf"), "ao=null\nvo=null\nvolume=70\n", Utf8);
+            WriteSilentWave(first); WriteSilentWave(second);
+            File.WriteAllLines(playlist, new string[] { first, second }, Utf8);
+            string mpv = Path.Combine(components.Directory, "mpv.exe");
+            unrelated = Process.Start(new ProcessStartInfo(mpv,
+                "--no-config --load-scripts=no --idle=yes --ao=null --vo=null --force-window=no --terminal=no")
+                { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = components.Directory });
+            string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
+            string[] arguments = { "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(paths.EngineRoot, "Radio.ps1"),
+                "-MpvFolder", paths.PlayerRoot, "-MpvExecutable", mpv,
+                "-LuaScriptPath", Path.Combine(paths.EngineRoot, "portable_config", "scripts", "random-start.lua"),
+                "-Playlist", playlist, "-DurationSeconds", "60", "-Volume", "70" };
+            var start = new ProcessStartInfo(powershell, String.Join(" ", arguments.Select(RadioBackend.QuoteArgument)))
+                { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = paths.PlayerRoot, RedirectStandardOutput = true, RedirectStandardError = true };
+            start.EnvironmentVariables["PATH"] = components.Directory + ";" + start.EnvironmentVariables["PATH"];
+            supervisor = new Process { StartInfo = start };
+            DataReceivedEventHandler capture = delegate(object sender, DataReceivedEventArgs e)
+            {
+                if (e.Data == null) return;
+                lock (output) { output.AppendLine(e.Data); if (output.Length > 16000) output.Remove(0, output.Length - 16000); }
+            };
+            supervisor.OutputDataReceived += capture; supervisor.ErrorDataReceived += capture;
+            supervisor.Start(); supervisorStarted = true; supervisor.BeginOutputReadLine(); supervisor.BeginErrorReadLine();
+            WaitUntil(delegate { return backend.GetStatus().Playing; }, 15000, "desktop backend sees the real player");
+            string before = backend.GetStatus().Title;
+            Check(!String.IsNullOrEmpty(before), "desktop backend reads the actual media title");
+            backend.Pause(); WaitUntil(delegate { return backend.GetStatus().Paused; }, 5000, "C# Pause reaches actual MPV");
+            backend.Pause(); WaitUntil(delegate { PlaybackStatus status = backend.GetStatus(); return status.Playing && !status.Paused; }, 5000, "C# Resume reaches actual MPV");
+            backend.Next(); WaitUntil(delegate { PlaybackStatus status = backend.GetStatus(); return status.Playing && status.Title != before; }, 10000, "C# Next changes the actual playlist item");
+            backend.Stop();
+            Check(supervisor.WaitForExit(10000), "C# Stop closes the owned supervisor");
+            supervisor.WaitForExit();
+            Check(supervisor.ExitCode == 0, "desktop Stop preserves successful supervisor exit: " + output.ToString());
+            Check(!backend.GetStatus().Playing, "C# status reports stopped after shutdown");
+            Check(!unrelated.HasExited, "desktop Stop leaves an unrelated MPV untouched");
+        }
+        finally
+        {
+            try { backend.Stop(); } catch (Exception error) { Console.Error.WriteLine("Playback cleanup: " + error.Message); }
+            if (supervisor != null)
+            {
+                if (supervisorStarted && !supervisor.HasExited && !supervisor.WaitForExit(10000)) { supervisor.Kill(); supervisor.WaitForExit(5000); }
+                supervisor.Dispose();
+            }
+            if (unrelated != null)
+            {
+                if (!unrelated.HasExited) { unrelated.Kill(); unrelated.WaitForExit(5000); }
+                unrelated.Dispose();
+            }
+            Console.WriteLine(output.ToString());
+            if (Directory.Exists(paths.PlayerRoot)) Directory.Delete(paths.PlayerRoot, true);
+        }
+    }
+
+    private static void WaitUntil(Func<bool> condition, int milliseconds, string label)
+    {
+        Stopwatch clock = Stopwatch.StartNew();
+        while (clock.ElapsedMilliseconds < milliseconds)
+        {
+            if (condition()) { Check(true, label); return; }
+            Thread.Sleep(100);
+        }
+        Check(false, label + " timed out");
+    }
+
+    private static void WriteSilentWave(string path)
+    {
+        const int bytes = 8000 * 2 * 40;
+        using (var writer = new BinaryWriter(File.Create(path)))
+        {
+            writer.Write(Encoding.ASCII.GetBytes("RIFF")); writer.Write(36 + bytes); writer.Write(Encoding.ASCII.GetBytes("WAVEfmt "));
+            writer.Write(16); writer.Write((short)1); writer.Write((short)1); writer.Write(8000); writer.Write(16000); writer.Write((short)2); writer.Write((short)16);
+            writer.Write(Encoding.ASCII.GetBytes("data")); writer.Write(bytes); writer.Write(new byte[bytes]);
+        }
     }
 
     private static void RunScheduler(string executable)

@@ -51,7 +51,7 @@ namespace AutomaticMusic
                 TryLog(backend, paths, exception);
                 if (args.Length == 0 || startOnSetup)
                 {
-                    MessageBox.Show("Automatic Music could not start.\r\n\r\n" + exception.GetBaseException().Message + "\r\n\r\nYour saved settings have not been reset.\r\nLog: " + paths.LogPath, Product.Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Automatic Music could not start.\r\n\r\n" + exception.Message + "\r\n\r\nYour saved settings have not been reset.\r\nLog: " + paths.LogPath, Product.Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
                 return 1;
             }

@@ -177,6 +177,7 @@ function Expand-RadioMpvArchive([string]$Archive, [string]$Destination) {
 }
 
 function Expand-RadioDenoArchive([string]$Archive, [string]$Destination) {
+    Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     $zip = [IO.Compression.ZipFile]::OpenRead($Archive)

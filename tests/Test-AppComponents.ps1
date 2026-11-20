@@ -1,8 +1,12 @@
 # Offline fixtures by default. -Integration also downloads and exercises the
 # three real pinned upstream Windows components in a temporary application folder.
-param([switch]$Integration)
+param([switch]$Integration, [string]$AppDirectory = '')
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT' -or $PSVersionTable.PSEdition -ne 'Desktop') { throw 'These tests require Windows PowerShell 5.1.' }
+if ($AppDirectory) {
+    $AppDirectory = (Resolve-Path -LiteralPath $AppDirectory -ErrorAction Stop).ProviderPath
+    if (-not (Test-Path -LiteralPath (Join-Path $AppDirectory 'AppBackendTests.exe') -PathType Leaf)) { throw 'AppDirectory must contain the built AppBackendTests.exe.' }
+}
 $repo = Split-Path -Parent $PSScriptRoot
 $componentScript = Join-Path $repo 'app\Install-Components.ps1'
 $componentLockPath = Join-Path $repo 'app\components.lock.json'
@@ -62,6 +66,7 @@ public static class ComponentFixture {
     }
 }
 '@
+    Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $script:componentProbe = Join-Path $work 'probes.txt'
     $env:AUTOMATIC_MUSIC_TEST_PROBE = $script:componentProbe
@@ -189,6 +194,11 @@ if ($Integration) {
         [IO.File]::WriteAllBytes($receiptPath, $savedReceipt)
         $null = Install-RadioComponents -Root $live -LockPath $componentLockPath -OnlyCheck
         Write-Host ('PASS: real pinned Windows MPV + yt-dlp + Deno download, extraction, versions, receipt, repeat installation and CheckOnly; bundle ' + $installed.bundle)
+        if ($AppDirectory) {
+            $backendTests = Join-Path $AppDirectory 'AppBackendTests.exe'
+            & $backendTests --playback-only $AppDirectory $live
+            Assert-Component ($LASTEXITCODE -eq 0) 'real MPV playback and desktop IPC controls'
+        }
     } finally {
         if (Test-Path -LiteralPath $live) { Remove-Item -LiteralPath $live -Recurse -Force }
     }

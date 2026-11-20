@@ -20,6 +20,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build native app, portable ZIP and per-user setup EXE
+        id: build
         shell: powershell
         run: .\installer\Build-App.ps1
       - name: Exercise and render the native interface without touching user settings
@@ -37,6 +38,8 @@ jobs:
             if ($capture.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $png)) { Get-Content -LiteralPath $errorFile; throw "UI capture failed: $page" }
           }
       - name: Test settings, process arguments, ownership and task registration
+        id: backend
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: powershell
         run: |
           $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
@@ -53,9 +56,11 @@ jobs:
           & .\dist\AutomaticMusic\AppBackendTests.exe .\dist\AutomaticMusic
           if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed.' }
       - name: Test offline component failures and actual verified upstream installation
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: powershell
-        run: .\tests\Test-AppComponents.ps1 -Integration
+        run: .\tests\Test-AppComponents.ps1 -Integration -AppDirectory .\dist\AutomaticMusic
       - name: Install, upgrade and uninstall as a real standard Windows user
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.backend.outcome == 'success' }}
         shell: powershell
         run: .\tests\Test-AppPackage.ps1 -SetupPath .\dist\Automatic-Music-Setup-0.2.0-beta.1.exe
       - name: Publish tested beta installer and portable download

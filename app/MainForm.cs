@@ -141,15 +141,18 @@ namespace AutomaticMusic
             shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
             Controls.Add(shell);
 
-            Panel header = new Panel { Dock = DockStyle.Fill, BackColor = Paper, Padding = new Padding(26, 14, 26, 10) };
+            TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Paper, ColumnCount = 1, RowCount = 2, Padding = new Padding(26, 8, 26, 8), Margin = Padding.Empty };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 64));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 36));
             Label brand = MakeLabel("Automatic Music", 22, FontStyle.Bold, Ink);
-            brand.Dock = DockStyle.Top;
-            brand.Height = 34;
+            brand.Dock = DockStyle.Fill;
+            brand.TextAlign = ContentAlignment.MiddleLeft;
             Label subtitle = MakeLabel("Your playlist. Your speakers. Your schedule.", 10, FontStyle.Regular, SecondaryInk);
-            subtitle.Dock = DockStyle.Bottom;
-            subtitle.Height = 24;
-            header.Controls.Add(brand);
-            header.Controls.Add(subtitle);
+            subtitle.Dock = DockStyle.Fill;
+            subtitle.TextAlign = ContentAlignment.MiddleLeft;
+            header.Controls.Add(brand, 0, 0);
+            header.Controls.Add(subtitle, 0, 1);
             shell.Controls.Add(header, 0, 0);
             shell.SetColumnSpan(header, 2);
 
@@ -372,6 +375,7 @@ namespace AutomaticMusic
             saveActions.Controls.Add(playButton);
             AddStack(stack, saveActions, 43);
             saveMessage = MakeLabel("", 9, FontStyle.Regular, SecondaryInk);
+            saveMessage.Visible = false;
             AddStack(stack, saveMessage, 45);
         }
 
@@ -396,17 +400,17 @@ namespace AutomaticMusic
             AddAdvancedRow(stack, "Longest sample", sampleMax, "minutes");
             AddAdvancedRow(stack, "Fade out before the next track", fade, "seconds");
             Label history = MakeLabel("Short songs play normally. Smart starts remember heard sections,\r\nand recent-track history keeps the last 10 accepted starts.", 9, FontStyle.Regular, SecondaryInk);
-            history.Margin = new Padding(0, 13, 0, 15);
-            AddStack(stack, history, 48);
+            history.Margin = new Padding(0, 8, 0, 8);
+            AddStack(stack, history, 40);
             wakeComputer = new CheckBox { Text = "Allow Windows to wake the computer for a session", AutoSize = false, Height = 32, Margin = new Padding(0, 3, 0, 3) };
             AddStack(stack, wakeComputer, 32);
-            AddStack(stack, MakeLabel("Windows must already be signed in. A powered-off computer cannot play music.", 9, FontStyle.Regular, SecondaryInk), 38);
+            AddStack(stack, MakeLabel("Windows must already be signed in. A powered-off computer cannot play music.", 9, FontStyle.Regular, SecondaryInk), 34);
             saveAdvancedButton = MakeButton("Save preferences", true, 159);
             saveAdvancedButton.Click += async delegate { await SaveAsync(false); };
             FlowLayoutPanel advancedSave = MakeRow();
             advancedSave.Controls.Add(saveAdvancedButton);
-            AddStack(stack, advancedSave, 48);
-            AddStack(stack, MakeLabel("Maintenance", 12, FontStyle.Bold, Ink), 31);
+            AddStack(stack, advancedSave, 44);
+            AddStack(stack, MakeLabel("Maintenance", 12, FontStyle.Bold, Ink), 28);
             FlowLayoutPanel maintenance = MakeRow();
             maintenance.WrapContents = true;
             repairButton = MakeButton("Repair playback", false, 146);
@@ -418,7 +422,7 @@ namespace AutomaticMusic
             maintenance.Controls.Add(repairButton);
             maintenance.Controls.Add(openLogs);
             maintenance.Controls.Add(uninstallButton);
-            AddStack(stack, maintenance, 46);
+            AddStack(stack, maintenance, 42);
         }
 
         private async Task InitializeAsync()
@@ -516,7 +520,7 @@ namespace AutomaticMusic
 
         private async Task SaveAsync(bool andPlay)
         {
-            if (preview) { saveMessage.Text = "Interface preview — no settings or schedules are saved."; return; }
+            if (preview) { saveMessage.Text = "Interface preview — no settings or schedules are saved."; saveMessage.Visible = true; return; }
             AppSettings draft;
             try { draft = ReadSettingsFromControls(); ValidateUiValues(draft, andPlay); }
             catch (Exception exception) { ShowFailure(exception); return; }
@@ -535,6 +539,7 @@ namespace AutomaticMusic
                 loading = false;
                 saveMessage.ForeColor = Accent;
                 saveMessage.Text = "Saved. " + DescribeSchedules(draft);
+                saveMessage.Visible = true;
                 setupStep.Text = "STEP 3 OF 3  ·  READY";
                 setupHeading.Text = "Your music is ready.";
                 setupDescription.Text = "Play a session now, or leave your saved schedule to handle it.\r\nYou can change these settings whenever you need.";
@@ -612,12 +617,13 @@ namespace AutomaticMusic
 
         private void ShowFailure(Exception exception)
         {
-            string message = exception.GetBaseException().Message;
+            string message = exception.Message;
             if (!preview && backend != null) { try { backend.LogError(exception); } catch { } }
             footerStatus.Text = message;
             footerStatus.ForeColor = ErrorInk;
             saveMessage.Text = message;
             saveMessage.ForeColor = ErrorInk;
+            saveMessage.Visible = true;
             if (currentPage == "setup")
             {
                 componentSummary.Text = "Setup could not finish. " + message;
@@ -697,6 +703,7 @@ namespace AutomaticMusic
             StyleButton(morningButton, key == "morning");
             StyleButton(finisherButton, key == "finisher");
             saveMessage.Text = "";
+            saveMessage.Visible = false;
         }
 
         private AppSettings ReadSettingsFromControls()
@@ -877,12 +884,27 @@ namespace AutomaticMusic
         private static Button MakeButton(string text, bool primary, int width)
         {
             Button button = new Button { Text = text, UseMnemonic = false, Height = 35, Width = width, FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 8, 0), Font = new Font("Segoe UI", 9F, FontStyle.Bold), UseVisualStyleBackColor = false };
+            button.EnabledChanged += delegate { ApplyButtonAppearance(button); };
             StyleButton(button, primary);
             return button;
         }
 
         private static void StyleButton(Button button, bool primary)
         {
+            button.Tag = primary;
+            ApplyButtonAppearance(button);
+        }
+
+        private static void ApplyButtonAppearance(Button button)
+        {
+            bool primary = button.Tag is bool && (bool)button.Tag;
+            if (!button.Enabled)
+            {
+                button.BackColor = Color.FromArgb(241, 243, 243);
+                button.ForeColor = Color.FromArgb(142, 153, 161);
+                button.FlatAppearance.BorderColor = Color.FromArgb(225, 230, 232);
+                return;
+            }
             button.BackColor = primary ? Accent : Paper;
             button.ForeColor = primary ? Color.White : Ink;
             button.FlatAppearance.BorderSize = 1;

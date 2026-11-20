@@ -168,17 +168,20 @@ namespace AutomaticMusic
         // own supervisor exits. It never launches a form or extends the duration.
         public void RunSession(string sessionKey)
         {
-            AppSettings settings = LoadSettings();
-            SessionSettings session = settings.GetSession(sessionKey);
-            if (!session.Enabled) return;
-            ComponentPointer bundle = RequireComponents(true);
             PlaybackWorker worker = null;
             WithOperationLock(delegate
             {
+                // Save commits task definitions before its final settings JSON.
+                // A task firing during that transaction must wait before reading.
+                AppSettings settings = LoadSettings();
+                SessionSettings session = settings.GetSession(sessionKey);
+                if (!session.Enabled) return;
+                ComponentPointer bundle = RequireComponents(true);
                 PreparePlaybackConfig(settings);
                 worker = StartPlayback(bundle, NormalizePlaylistUrl(session.PlaylistUrl), session.DurationMinutes * 60,
                     false, settings.AudioDeviceId, settings.Volume, true);
             });
+            if (worker == null) return;
             try
             {
                 worker.Process.WaitForExit();
