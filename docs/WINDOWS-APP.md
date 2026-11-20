@@ -10,7 +10,7 @@ choosing an output speaker, and adjusting sampling of long recordings. Version
 - Windows **11**, **x64**.
 - Windows on ARM and 32-bit Windows are not supported by this build.
 
-Windows 10 has reached the end of standard security support. A supported Windows 11 installation is preferable for an internet-connected music player. The beta is built and smoke-tested on hosted Windows Server runners; an actual Windows 10 22H2 desktop installation, MPV archive extraction and audible YouTube playback still require end-user testing.
+Windows 10 has reached the end of standard security support. A supported Windows 11 installation is preferable for an internet-connected music player. The beta is built and smoke-tested on hosted Windows Server runners; an actual Windows 10 22H2 desktop installation and audible YouTube playback still require end-user testing.
 
 ## First-time setup
 
@@ -66,8 +66,11 @@ speaker, firewall, Windows logon settings or persistent PowerShell policy.
 The app automatically downloads its pinned components directly from their
 upstream release providers. Each download must match the SHA-256 recorded in
 `components.lock.json` before extraction or execution. The install then runs
-bounded version checks. MPV's complete archive is extracted using Windows' own
-`tar.exe`; no archive application is required.
+bounded version checks. MPV's complete archive is extracted using Windows'
+`tar.exe` when its codec is supported. Older Windows builds that lack LZMA
+support automatically download and SHA-256-verify a pinned, standalone official
+7-Zip `7zr.exe` (approximately 600 KB) to extract MPV. No separate archiver
+installation or manual steps are required.
 
 Repair prepares a separate component bundle and activates it only after all
 checks pass. A failed repair preserves the previous active bundle. Working
