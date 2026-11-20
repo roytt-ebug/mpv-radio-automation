@@ -756,7 +756,10 @@ namespace AutomaticMusic
             verifyButton.Enabled = speakerTestButton.Enabled = refreshSpeakersButton.Enabled = !busy && componentsReady;
             repairButton.Enabled = !busy;
             uninstallButton.Enabled = !busy && !preview && File.Exists(Path.Combine(paths.InstallRoot, "unins000.exe"));
-            pauseButton.Enabled = nextButton.Enabled = stopButton.Enabled = !busy && playing;
+            pauseButton.Enabled = nextButton.Enabled = !busy && playing;
+            // A loading or damaged player may have no media title yet. Stop is
+            // scoped to this app and must remain available for recovery.
+            stopButton.Enabled = !busy;
             morningButton.Enabled = finisherButton.Enabled = !busy;
             playlist.Enabled = speaker.Enabled = volume.Enabled = scheduleEnabled.Enabled = !busy;
             durationHours.Enabled = durationMinutes.Enabled = !busy;
