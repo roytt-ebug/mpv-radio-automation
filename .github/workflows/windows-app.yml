@@ -13,7 +13,11 @@ permissions:
   contents: read
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -30,6 +34,7 @@ jobs:
             if ([version]$valid -lt $minimum) { throw "Supported Windows version $valid fails the minimum." }
           }
           if ([version]'10.0.18363' -ge $minimum) { throw 'Older Windows 10 versions must not pass minimum OS requirement.' }
+          if ('${{ matrix.os }}' -eq 'windows-2022' -and [Environment]::OSVersion.Version.Build -ge 22000) { throw 'The Windows 2022 smoke runner no longer exercises a pre-Windows-11 build.' }
           Write-Host 'Windows 10 22H2 and Windows 11 x64 pass declared installer version/architecture gate.'
       - name: Build native app, portable ZIP and per-user setup EXE
         id: build
@@ -78,7 +83,7 @@ jobs:
       - name: Publish tested beta installer and portable download
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: Automatic-Music-0.2.0-beta.2-Windows-x64
+          name: Automatic-Music-0.2.0-beta.2-Windows-x64-${{ matrix.os }}
           path: |
             dist/Automatic-Music-Setup-0.2.0-beta.2.exe
             dist/Automatic-Music-0.2.0-beta.2-portable.zip
@@ -90,7 +95,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: Automatic-Music-Windows-interface
+          name: Automatic-Music-Windows-interface-${{ matrix.os }}
           path: artifacts/*.png
           if-no-files-found: ignore
           retention-days: 30
