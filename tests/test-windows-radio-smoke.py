@@ -97,8 +97,10 @@ with tempfile.TemporaryDirectory(prefix='radio single player ') as directory:
             raise AssertionError('Manual MPV did not start playing: ' + repr(position))
         assert len(radio_processes()) == 1, 'Manual playback must have exactly one owned MPV'
         assert not radio_command(['get_property', 'user-data/radio-status'])['ok'], 'Manual playback loaded the radio/history script'
-        mode = radio_command(['get_property', 'options/vid'])
-        assert mode['ok'] and mode['data'] == ('auto' if video else 'no'), 'Manual audio/video mode changed'
+        # Compare MPV's documented text representation; native JSON properties
+        # can represent option choices as booleans or numbers instead of strings.
+        mode = radio_command(['get_property_string', 'options/vid'])
+        assert mode['ok'] and mode['data'] == ('auto' if video else 'no'), 'Manual audio/video mode changed: ' + repr(mode)
 
     def history_snapshot():
         return {name: (config / name).read_bytes() if (config / name).exists() else None
