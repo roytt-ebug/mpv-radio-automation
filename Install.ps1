@@ -414,7 +414,9 @@ function Update-RadioMpvConfig([string]$Path, [string]$DeviceId) {
     try {
         [IO.File]::WriteAllBytes($temporary, $bytes)
         # Keep the existing file intact until its complete replacement is ready.
-        [IO.File]::Replace($temporary, $Path, $null)
+        # PowerShell 5.1 converts ordinary $null to an empty string for this
+        # .NET string parameter. NullString passes the intended null backup path.
+        [IO.File]::Replace($temporary, $Path, [NullString]::Value)
     } finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
     }
