@@ -19,6 +19,18 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Check Windows 10 and Windows 11 x64 installer compatibility
+        shell: powershell
+        run: |
+          $script = Get-Content .\installer\AutomaticMusic.iss -Raw
+          if ($script -notmatch '(?m)^MinVersion=10\.0\.19041\s*$') { throw 'Installer must accept Windows 10 2004+ (including 22H2 build 19045) and Windows 11.' }
+          if ($script -notmatch '(?m)^ArchitecturesAllowed=x64os\s*$') { throw 'Installer must remain restricted to Windows x64.' }
+          $minimum = [version]'10.0.19041'
+          foreach ($valid in @('10.0.19045','10.0.22000','10.0.22631','10.0.26100')) {
+            if ([version]$valid -lt $minimum) { throw "Supported Windows version $valid fails the minimum." }
+          }
+          if ([version]'10.0.18363' -ge $minimum) { throw 'Older Windows 10 versions must not pass minimum OS requirement.' }
+          Write-Host 'Windows 10 22H2 and Windows 11 x64 pass declared installer version/architecture gate.'
       - name: Build native app, portable ZIP and per-user setup EXE
         id: build
         shell: powershell
@@ -62,14 +74,14 @@ jobs:
       - name: Install, upgrade and uninstall as a real standard Windows user
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.backend.outcome == 'success' }}
         shell: powershell
-        run: .\tests\Test-AppPackage.ps1 -SetupPath .\dist\Automatic-Music-Setup-0.2.0-beta.1.exe
+        run: .\tests\Test-AppPackage.ps1 -SetupPath .\dist\Automatic-Music-Setup-0.2.0-beta.2.exe
       - name: Publish tested beta installer and portable download
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: Automatic-Music-0.2.0-beta.1-Windows-x64
+          name: Automatic-Music-0.2.0-beta.2-Windows-x64
           path: |
-            dist/Automatic-Music-Setup-0.2.0-beta.1.exe
-            dist/Automatic-Music-0.2.0-beta.1-portable.zip
+            dist/Automatic-Music-Setup-0.2.0-beta.2.exe
+            dist/Automatic-Music-0.2.0-beta.2-portable.zip
             dist/SHA256SUMS.txt
             docs/WINDOWS-APP.md
           if-no-files-found: error
