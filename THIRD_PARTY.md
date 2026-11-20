@@ -28,6 +28,21 @@ If you redistribute the Windows executable yourself, you are responsible for the
 
 This project instead downloads/references yt-dlp from its official upstream release.
 
+## Desktop app component setup
+
+The desktop installer contains this project's app and scripts. It downloads MPV,
+yt-dlp and Deno directly from their upstream release providers on the user's
+computer. The exact versions, source URLs, sizes and SHA-256 hashes are recorded
+in `app/components.lock.json`. The complete MPV archive is retained, including
+its upstream notices. These downloaded binaries are not included in the project
+installer or portable ZIP.
+
+Deno project/source and licensing information:
+https://github.com/denoland/deno
+
+The app uses Windows' existing `tar.exe` and .NET Framework libraries. It does
+not redistribute a separate archive utility or .NET runtime.
+
 ## Project code
 
 The automation scripts written for this repository are licensed under the MIT License in `LICENSE`.

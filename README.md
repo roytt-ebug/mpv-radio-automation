@@ -1,4 +1,4 @@
-# MPV Radio Automation for Windows
+# Automatic Music for Windows
 
 **Scheduled YouTube music, with variety across songs and long mixes.**
 
@@ -7,6 +7,25 @@ Choose your playlists, speaker, and schedule. The player shuffles ordinary songs
 The project uses **one MPV player**, yt-dlp for YouTube playback, and Windows Task Scheduler. MPV's playback controls stay visible while its PowerShell supervisor runs without a terminal window.
 
 **Status: early test build for Windows x64.** Automated checks pass, but test your own scheduled playback and speaker before relying on it unattended.
+
+## New: guided Windows desktop beta
+
+The **0.2.0-beta.1 desktop app** adds a per-user installer, automatic verified
+setup of MPV/yt-dlp/Deno, and a native settings window. Paste playlists, choose a
+speaker, save schedules and adjust sampling without editing scripts.
+
+**[Desktop app quick start](docs/WINDOWS-APP.md)** ·
+**[Windows app builds](../../actions/workflows/windows-app.yml)**
+
+Download the installer from the artifacts of a successful **Build Windows app**
+run. A public stable release has not been published. The installer is named
+`Automatic-Music-Setup-0.2.0-beta.1.exe`; an optional portable ZIP is also built.
+Windows 11 x64 and internet access for the first component setup are required.
+The app does not need a separate activation account.
+
+The instructions below describe the existing console toolkit, which remains
+available for people using `C:\MPV`. Existing toolkit installations are not
+automatically migrated or disabled by the desktop beta.
 
 ## Defaults and adjustable limits
 

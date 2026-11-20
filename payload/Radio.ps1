@@ -6,6 +6,9 @@ param(
     [ValidateRange(1,86400)][double]$DurationSeconds = 10800,
     [string]$MpvFolder = '',
     [string]$MpvExecutable,
+    [string]$LuaScriptPath,
+    [string]$AudioDeviceId,
+    [ValidateRange(0,100)][int]$Volume = 70,
     [switch]$Manual,
     [switch]$Video,
     [switch]$Stop,
@@ -56,6 +59,7 @@ function Invoke-RadioCommand([string]$Endpoint, [object[]]$Command) {
 if ($FunctionsOnly) { return }
 if ($env:OS -ne 'Windows_NT') { throw 'Radio.ps1 requires Windows. Use mpv directly on other systems.' }
 if ($Video -and -not $Manual) { throw 'Video playback requires -Manual.' }
+if ($AudioDeviceId -match '[\x00\r\n]') { throw 'Select a valid audio device.' }
 # Manual shortcuts previously played until completion or user stop. Preserve that
 # behavior, while honoring an explicitly supplied duration in either mode.
 $limitDuration = -not $Manual -or $PSBoundParameters.ContainsKey('DurationSeconds')
@@ -63,7 +67,8 @@ $MpvFolder = [IO.Path]::GetFullPath($MpvFolder).TrimEnd([char[]]'\/')
 if (-not $Stop) {
     if (-not $Playlist) { throw 'Supply -Playlist "https://www.youtube.com/playlist?list=...".' }
     if (-not $MpvExecutable) { $MpvExecutable = Join-Path $MpvFolder 'mpv.exe' }
-    $lua = Join-Path $MpvFolder 'portable_config\scripts\random-start.lua'
+    $lua = $LuaScriptPath
+    if (-not $lua) { $lua = Join-Path $MpvFolder 'portable_config\scripts\random-start.lua' }
     $requiredFiles = @($MpvExecutable)
     if (-not $Manual) { $requiredFiles += $lua }
     foreach ($file in $requiredFiles) {
@@ -115,6 +120,8 @@ try {
     if ($Video) {
         $arguments += @('--vid=auto', '--ontop', '--autofit=50%', '--ytdl-format=bestvideo[height<=720]+bestaudio/best[height<=720]')
     } else { $arguments += '--vid=no' }
+    if ($AudioDeviceId) { $arguments += "--audio-device=$AudioDeviceId" }
+    if ($PSBoundParameters.ContainsKey('Volume')) { $arguments += "--volume=$Volume" }
     $start.Arguments = Join-NativeArguments ($arguments + @('--', $Playlist))
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $player = [Diagnostics.Process]::Start($start)
