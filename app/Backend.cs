@@ -819,7 +819,7 @@ namespace AutomaticMusic
                 folder = service.GetFolder(folderPath); task = folder.GetTask(key); string xml = task.Xml;
                 RadioBackend.ValidateTaskOwnership(xml, key, sid, executable); return xml;
             }
-            catch (COMException error) { if (Missing(error)) return null; throw; }
+            catch (Exception error) { if (Missing(error)) return null; throw; }
             finally { Release(task); Release(folder); }
         }
         public void Set(string key, string xml)
@@ -832,7 +832,7 @@ namespace AutomaticMusic
             try
             {
                 try { folder = service.GetFolder(folderPath); }
-                catch (COMException error)
+                catch (Exception error)
                 {
                     if (!Missing(error)) throw;
                     root = service.GetFolder("\\"); folder = root.CreateFolder(folderPath.TrimStart('\\'), null);
@@ -842,14 +842,17 @@ namespace AutomaticMusic
             }
             finally { Release(saved); Release(folder); Release(root); }
         }
-        private static bool Missing(COMException error) { return error.ErrorCode == unchecked((int)0x80070002) || error.ErrorCode == unchecked((int)0x80070003); }
+        // Dynamic COM interop translates some HRESULTs into framework exception
+        // types (notably FileNotFoundException), rather than COMException.
+        // Only the two absence codes are harmless; access denied must propagate.
+        private static bool Missing(Exception error) { return error.HResult == unchecked((int)0x80070002) || error.HResult == unchecked((int)0x80070003); }
         internal void RemoveEmptyTestFolder()
         {
             if (!folderPath.StartsWith("\\AutomaticMusic-Test-", StringComparison.Ordinal)) throw new InvalidOperationException("Only a test folder can be removed here.");
             dynamic folder = null, tasks = null, folders = null, root = null;
             try
             {
-                try { folder = service.GetFolder(folderPath); } catch (COMException error) { if (Missing(error)) return; throw; }
+                try { folder = service.GetFolder(folderPath); } catch (Exception error) { if (Missing(error)) return; throw; }
                 tasks = folder.GetTasks(0); folders = folder.GetFolders(0);
                 if (tasks.Count != 0 || folders.Count != 0) throw new InvalidOperationException("The scheduler test folder is not empty.");
                 root = service.GetFolder("\\"); root.DeleteFolder(folderPath.TrimStart('\\'), 0);
