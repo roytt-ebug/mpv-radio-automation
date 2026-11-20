@@ -40,8 +40,13 @@ installer or portable ZIP.
 Deno project/source and licensing information:
 https://github.com/denoland/deno
 
-The app uses Windows' existing `tar.exe` and .NET Framework libraries. It does
-not redistribute a separate archive utility or .NET runtime.
+The app uses Windows' existing `tar.exe` and .NET Framework libraries where
+possible. On Windows builds where the built-in `tar.exe` cannot decode MPV's
+LZMA-compressed 7z archive, the app automatically downloads the official,
+pinned 7-Zip `7zr.exe` 26.06 from the upstream GitHub release, verifies its
+600,064-byte size and SHA-256 before running, then uses it only for extraction.
+7-Zip source and licensing information: https://github.com/ip7z/7zip .
+The project installer does not redistribute 7-Zip or a .NET runtime.
 
 ## Project code
 
