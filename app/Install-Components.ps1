@@ -160,7 +160,7 @@ function Assert-RadioComponentDownload($Component, [string]$Path) {
 
 function Expand-RadioMpvArchive([string]$Archive, [string]$Destination) {
     $tar = Join-Path ([Environment]::GetFolderPath('System')) 'tar.exe'
-    if (-not (Test-Path -LiteralPath $tar -PathType Leaf)) { throw 'Windows tar.exe is missing. Windows 11 x64 is required for this setup.' }
+    if (-not (Test-Path -LiteralPath $tar -PathType Leaf)) { throw 'Windows tar.exe is missing. Windows 10 (2004 or newer) or Windows 11 x64 is required for this setup.' }
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     $list = Invoke-RadioComponentProcess $tar @('-tf', $Archive) $Destination 60
     $paths = @($list.Output -split '\r?\n' | Where-Object { $_ })
