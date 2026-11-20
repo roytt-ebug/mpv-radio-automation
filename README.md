@@ -33,9 +33,9 @@ Change session duration during setup. Change the other settings in the [sampling
 4. **Choose your speaker, playlists, and schedules** using the examples below. Review the summary and type **YES** to save.
 5. **Test a task:** open **Task Scheduler**, right-click **Music - Morning** or **Music - Day Finisher**, and choose **Run**. Confirm that MPV opens and music comes from the selected speaker.
 
-The installer is **revision 9**. It downloads yt-dlp only if missing, verifies the download's checksum, and builds the small `Radio-Hidden.exe` helper from included source. Deno is an [optional recommendation](#optional-recommendation-deno).
+The installer is **revision 10**. It downloads yt-dlp only if missing, verifies the download's checksum, and builds the small `Radio-Hidden.exe` helper from included source. Deno is an [optional recommendation](#optional-recommendation-deno).
 
-Setup backs up files and matching tasks it replaces in `C:\MPV\setup-backups`. Running setup again can reset custom playback settings; listening-history files are retained unless you delete them. If setup fails, it shows the failed step and an error-log location; it does not automatically undo completed changes.
+Setup backs up files and matching tasks it replaces in `C:\MPV\setup-backups`. Running setup again preserves existing sampling preferences, other MPV settings and listening histories while updating the selected global audio output. A custom MPV profile can still override that output when the profile is active. Fresh installations use the documented defaults. If setup fails, it shows the failed step and an error-log location; it does not automatically undo completed changes.
 
 ### Exactly what to type
 
@@ -124,9 +124,9 @@ The [defaults table](#defaults-and-adjustable-limits) explains each value and it
 | Q in MPV | Quit playback. |
 | F8 in MPV | Show the loaded radio script and its settings. |
 | `C:\MPV\Check Radio.cmd` | Check that the scheduled MPV and radio script both respond. |
-| `C:\MPV\Stop Radio.cmd` | Stop this installation's radio. |
+| `C:\MPV\Stop Radio.cmd` | Stop this installation's scheduled or manual playback. |
 
-With default settings, the radio check should show a **15-minute cutoff**, sampling **on**, and a **10–30-minute** range. Listen to confirm the selected speaker. Clipboard audio/video shortcuts play a copied YouTube link normally, without updating the radio histories; video is capped at 720p.
+With default settings, the radio check should show a **15-minute cutoff**, sampling **on**, and a **10–30-minute** range. Listen to confirm the selected speaker. Clipboard audio/video shortcuts play a copied YouTube link normally, without updating the radio histories; video is capped at 720p. Manual and scheduled launches replace the previous player owned by this installation, and **Stop Radio** controls both. Unrelated MPV windows are left alone. **Check Radio** checks the radio Lua script and is intended for scheduled mode; manual playback deliberately does not load that script.
 
 Keep the selected Windows user logged in; locking the screen is fine. The task can request wake from sleep, but it cannot turn on a powered-off computer. Test sleep/wake and speaker availability on your PC. A missed start is not automatically caught up; use **Run** to test immediately.
 
@@ -172,6 +172,10 @@ Checksum verification applies to **newly downloaded yt-dlp**. An existing copy i
 Report problems through [GitHub Issues](https://github.com/roytt-ebug/mpv-radio-automation/issues), including the installer revision and exact error. Remove private account details before sharing logs or screenshots.
 
 Project code is [MIT licensed](LICENSE). MPV and yt-dlp are obtained separately; see [third-party software notes](THIRD_PARTY.md). Automated [GitHub checks](https://github.com/roytt-ebug/mpv-radio-automation/actions) cover installer inputs, task definitions, history, sampling, and local-audio playback; they do not test your physical speaker or YouTube connection.
+
+## Toward a simpler Windows app
+
+The [Windows app and installer review](docs/WINDOWS-INSTALLER-REVIEW.md) records the tested foundation, proposed desktop controls, packaging approach, and remaining release checks. A graphical app and setup EXE are proposed work; this repository still uses the guided setup described above.
 
 ## Alternative: set everything up manually (no installer)
 

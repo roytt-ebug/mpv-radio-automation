@@ -14,17 +14,22 @@ function ConvertTo-ClipboardYouTubeUrl([string]$Text) {
 if ($FunctionsOnly) { return }
 try {
     $url = ConvertTo-ClipboardYouTubeUrl (Get-Clipboard -Raw)
-    & (Join-Path $PSScriptRoot 'Radio.ps1') -Stop
-    if (-not $?) { throw 'Radio could not stop. Close its window before starting manual playback.' }
+    $manualVideoRequested = [bool]$Video
     . (Join-Path $PSScriptRoot 'Radio.ps1') -FunctionsOnly
-    $arguments = @('--load-scripts=no', "--config-dir=$PSScriptRoot\portable_config")
-    if ($Video) { $arguments += @('--vid=auto','--ontop','--autofit=50%','--ytdl-format=bestvideo[height<=720]+bestaudio/best[height<=720]') }
-    else { $arguments += '--vid=no' }
+    $starter = Join-Path $PSScriptRoot 'Radio-Hidden.exe'
+    if (-not (Test-Path -LiteralPath $starter -PathType Leaf)) {
+        throw 'Radio-Hidden.exe is missing. Run setup again to restore the playback launcher.'
+    }
+    # Both manual and scheduled playback belong to the same supervisor. It stops
+    # the previous owned player before starting this one, without touching other MPV windows.
+    $arguments = @('-Manual', '-Playlist', $url)
+    if ($manualVideoRequested) { $arguments += '-Video' }
     $start = [Diagnostics.ProcessStartInfo]::new()
-    $start.FileName = Join-Path $PSScriptRoot 'mpv.exe'
+    $start.FileName = $starter
     $start.WorkingDirectory = $PSScriptRoot
     $start.UseShellExecute = $false
-    $start.Arguments = Join-NativeArguments ($arguments + @('--', $url))
+    $start.CreateNoWindow = $true
+    $start.Arguments = Join-NativeArguments $arguments
     $player = [Diagnostics.Process]::Start($start)
     $player.Dispose()
 } catch {

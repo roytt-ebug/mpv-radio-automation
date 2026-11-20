@@ -160,3 +160,6 @@ if ($env:OS -eq 'Windows_NT') {
     Assert-Equal ([datetime]$task.Triggers[0].StartBoundary).ToString('HH:mm') '18:35' 'actual trigger time'
 }
 Write-Host "PASS: $script:checks checks. No tasks were registered and no music was played."
+# Exercise real configuration files after parser/task-definition checks. Keep
+# upgrade preservation in the same Windows CI entry point as installer inputs.
+& (Join-Path $PSScriptRoot 'Test-InstallerUpgrade.ps1')
