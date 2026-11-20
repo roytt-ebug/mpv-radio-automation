@@ -37,6 +37,8 @@ New-Item -ItemType Directory -Path $work | Out-Null
 try {
     $manifest = Read-RadioComponentManifest $componentLockPath
     Assert-Component ($manifest.components.Count -eq 3) 'packaged lock contains all three official components'
+    $sevenZip = Get-RadioSevenZipComponent
+    Assert-Component ($sevenZip.url -ceq 'https://github.com/ip7z/7zip/releases/download/26.06/7zr.exe' -and $sevenZip.sha256 -ceq 'e80db2dad715a6c5adabe292d31ed54e11f4e9b99ca349827b50573b175891bc' -and $sevenZip.size -eq 600064) 'Windows 10 LZMA extractor is pinned to official 7-Zip release with SHA-256 and size'
     foreach ($version in @('v0.42.0-12-gbcde6b9', 'v0.42.0-12-gbcde6b93c', 'v0.42.0-12-gbcde6b93cc', 'v0.42.0-12-gbcde6b93cc45', 'v0.42.0-dev-gbcde6b93c', 'bcde6b93c', 'v0.42.0-12-gbcde6b93c-dirty')) {
         Assert-Component (Test-RadioMpvVersionOutput ("mpv $version Copyright fixture") 'bcde6b93cc') ('accept matching MPV Git abbreviation ' + $version)
     }
