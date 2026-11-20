@@ -2,11 +2,19 @@
 
 Automatic Music is a small Windows application for scheduling YouTube playlists,
 choosing an output speaker, and adjusting sampling of long recordings. Version
-**0.2.0-beta.1** introduces the native app and a per-user installer.
+**0.2.0-beta.2** introduces the native app and a per-user installer.
+
+## Supported Windows versions
+
+- Windows **10 version 2004 or later** (build 19041+), **x64**; this includes Windows 10 Pro 22H2 (build 19045).
+- Windows **11**, **x64**.
+- Windows on ARM and 32-bit Windows are not supported by this build.
+
+Windows 10 has reached the end of standard security support. A supported Windows 11 installation is preferable for an internet-connected music player. The beta is built and smoke-tested on hosted Windows Server runners; an actual Windows 10 22H2 desktop installation, MPV archive extraction and audible YouTube playback still require end-user testing.
 
 ## First-time setup
 
-1. Run **Automatic-Music-Setup-0.2.0-beta.1.exe** on Windows 11 x64.
+1. Run **Automatic-Music-Setup-0.2.0-beta.2.exe** on Windows 10 version 2004 or later, or Windows 11, on an x64 (Intel/AMD) PC.
 2. Open **Automatic Music** from the Start menu. No account or activation key is needed.
 3. On **Setup**, install the playback components. Keep the internet connection
    available while MPV, yt-dlp and Deno download and are verified.
@@ -94,7 +102,7 @@ reinstallation. Removing that folder manually after uninstall is optional.
 
 ## Building and testing
 
-The app uses Windows Forms and .NET Framework 4.8, included with Windows 11.
+The app uses Windows Forms and .NET Framework 4.8, included with supported Windows 10 and Windows 11.
 It has no NuGet dependencies and does not require a separately installed .NET
 runtime. Its source is in `app/`; the original PowerShell/Lua engine is retained.
 
@@ -116,7 +124,7 @@ a separate deliberate step.
 
 ### Desktop acceptance before a stable release
 
-- Clean Windows 11 standard-user install with no existing MPV/Deno/yt-dlp.
+- Clean Windows 10 22H2 and Windows 11 standard-user installs with no existing MPV/Deno/yt-dlp.
 - Real playlist access and audible playback on built-in, USB and Bluetooth audio.
 - Changing settings, relaunching, and an actual clock-triggered task.
 - Locked-screen playback, sleep/wake and a disconnected output device.
@@ -125,7 +133,7 @@ a separate deliberate step.
 
 Hosted Windows tests use generated local media and null outputs for playback
 integration. Their success does not establish live YouTube access or audible
-speaker behavior on a personal Windows 11 PC.
+speaker behavior on a personal Windows 10 or Windows 11 PC.
 
 ## Upstream references
 
