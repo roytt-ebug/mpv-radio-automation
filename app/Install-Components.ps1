@@ -234,6 +234,18 @@ function Get-RadioComponentFiles([string]$Directory) {
     }
 }
 
+function Test-RadioMpvVersionOutput([string]$Output, [string]$ExpectedHash) {
+    if ($ExpectedHash -notmatch '\A[0-9a-f]{7,40}\z') { return $false }
+    # MPV's git describe uses --abbrev=9; release asset names can use a
+    # different abbreviation. Read only MPV's version token, not library hashes.
+    $header = [regex]::Match($Output, '(?im)^[\t ]*mpv[\t ]+(?<version>\S+)')
+    if (-not $header.Success) { return $false }
+    $match = [regex]::Match($header.Groups['version'].Value, '(?i)(?:-g|^g?)(?<hash>[0-9a-f]{7,40})(?:-dirty)?$')
+    if (-not $match.Success) { return $false }
+    $reportedHash = $match.Groups['hash'].Value
+    return ($ExpectedHash.StartsWith($reportedHash, [StringComparison]::OrdinalIgnoreCase) -or $reportedHash.StartsWith($ExpectedHash, [StringComparison]::OrdinalIgnoreCase))
+}
+
 function Test-RadioComponentVersions([string]$Directory, $Versions) {
     foreach ($name in @('mpv.exe','mpv.com','yt-dlp.exe','deno.exe')) {
         if (-not (Test-Path -LiteralPath (Join-Path $Directory $name) -PathType Leaf)) { throw "Component bundle is missing $name." }
@@ -247,7 +259,14 @@ function Test-RadioComponentVersions([string]$Directory, $Versions) {
     foreach ($check in $checks) {
         if (-not $check.Token) { throw 'Missing component version in the bundle receipt.' }
         $result = Invoke-RadioComponentProcess (Join-Path $Directory $check.File) $check.Arguments $Directory 20
-        if ($result.Output.IndexOf($check.Token, [StringComparison]::OrdinalIgnoreCase) -lt 0) { throw "$($check.File) did not report its expected version." }
+        $matchesVersion = if ($check.File -eq 'mpv.com') { Test-RadioMpvVersionOutput $result.Output $check.Token } else { $result.Output.IndexOf($check.Token, [StringComparison]::OrdinalIgnoreCase) -ge 0 }
+        if (-not $matchesVersion) {
+            $stdout = $result.Output.Trim()
+            $stderr = $result.Error.Trim()
+            if ($stdout.Length -gt 1024) { $stdout = $stdout.Substring(0, 1024) + '... [truncated]' }
+            if ($stderr.Length -gt 1024) { $stderr = $stderr.Substring(0, 1024) + '... [truncated]' }
+            throw "$($check.File) did not report its expected version ($($check.Token)). Standard output: $stdout; Standard error: $stderr"
+        }
     }
 }
 

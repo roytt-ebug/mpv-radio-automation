@@ -87,7 +87,7 @@ $userCreated = $false
 try {
     [void][IO.Directory]::CreateDirectory($root)
     $password = ConvertTo-SecureString ('Am!' + [guid]::NewGuid().ToString('N') + '9a') -AsPlainText -Force
-    $user = New-LocalUser -Name $account -Password $password -Description 'Temporary Automatic Music installer acceptance test' -PasswordNeverExpires
+    $user = New-LocalUser -Name $account -Password $password -Description 'Automatic Music package acceptance test' -PasswordNeverExpires
     $userCreated = $true
     $usersGroup = Get-LocalGroup -SID 'S-1-5-32-545'
     Add-LocalGroupMember -Group $usersGroup -Member $user
