@@ -50,6 +50,10 @@ try {
     Update-RadioMpvConfig $config $device
     Assert-UpgradeEqual (Get-UpgradeBytes $config) $unchanged 'profile-only insertion is idempotent'
 
+    [IO.File]::WriteAllText($config, "[headphones]`naudio-device=wasapi/profile`n[]`naudio-device=auto`n", $utf8)
+    Update-RadioMpvConfig $config $device
+    Assert-UpgradeEqual ([IO.File]::ReadAllText($config)) ("[headphones]`naudio-device=wasapi/profile`n[]`naudio-device=$device`n") 'empty profile name resumes global settings'
+
     [IO.File]::WriteAllText($config, "--audio-device=auto # mpv also accepts the leading dashes`nvolume=22", $utf8)
     Update-RadioMpvConfig $config $device
     Assert-UpgradeEqual ([IO.File]::ReadAllText($config)) ("--audio-device=$device # mpv also accepts the leading dashes`nvolume=22") 'legacy leading dashes do not override the newly selected speaker'

@@ -390,9 +390,9 @@ function Update-RadioMpvConfig([string]$Path, [string]$DeviceId) {
         if ($lineMatch.Length -eq 0) { continue }
         $line = $lineMatch.Groups['line'].Value
         $eol = $lineMatch.Groups['eol'].Value
-        if ($line -cmatch '^[ \t]*\[(?<profile>[^\]\r\n]+)\][ \t]*(?:#.*)?$') {
-            # [default] resumes global options; named profiles stay untouched.
-            $inGlobalSection = $Matches.profile -ceq 'default'
+        if ($line -cmatch '^[ \t]*\[(?<profile>[^\]\r\n]*)\][ \t]*(?:#.*)?$') {
+            # [default] and [] resume global options; named profiles stay untouched.
+            $inGlobalSection = $Matches.profile -ceq 'default' -or $Matches.profile -ceq ''
         } elseif ($inGlobalSection -and $line -cmatch '^(?<prefix>[ \t]*(?:--)?audio-device[ \t]*=[ \t]*)(?<value>.*)$') {
             $prefix = $Matches.prefix; $oldValue = $Matches.value
             $line = $prefix + $value + (Get-MpvConfigValueSuffix $oldValue)
