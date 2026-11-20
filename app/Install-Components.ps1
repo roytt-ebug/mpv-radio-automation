@@ -158,24 +158,68 @@ function Assert-RadioComponentDownload($Component, [string]$Path) {
     Write-Host "Verified $($Component.id) download."
 }
 
-function Expand-RadioMpvArchive([string]$Archive, [string]$Destination) {
-    $tar = Join-Path ([Environment]::GetFolderPath('System')) 'tar.exe'
-    if (-not (Test-Path -LiteralPath $tar -PathType Leaf)) { throw 'Windows tar.exe is missing. Windows 10 (2004 or newer) or Windows 11 x64 is required for this setup.' }
-    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-    $list = Invoke-RadioComponentProcess $tar @('-tf', $Archive) $Destination 60
-    $paths = @($list.Output -split '\r?\n' | Where-Object { $_ })
-    if (-not $paths.Count -or $paths.Count -gt 5000) { throw 'Unexpected MPV archive entry count.' }
-    foreach ($path in $paths) { $null = Get-RadioComponentChildPath $Destination $path }
-    $details = Invoke-RadioComponentProcess $tar @('-tvf', $Archive) $Destination 60
-    $detailLines = @($details.Output -split '\r?\n' | Where-Object { $_ })
-    if ($detailLines.Count -ne $paths.Count) { throw 'The MPV archive listing could not be verified completely.' }
-    foreach ($line in $detailLines) {
-        # Reject links, special files and ambiguous listing formats before extraction.
-        if ($line -cnotmatch '^[-d][rwxStTs-]{9}\s') { throw 'The MPV archive contains an unsupported link or entry type.' }
+# A pinned, reduced official 7-Zip extractor for Windows builds whose built-in
+# bsdtar lacks LZMA support. It is downloaded only when necessary, never bundled.
+function Get-RadioSevenZipComponent {
+    return [pscustomobject]@{
+        id='sevenZip'
+        version='26.06'
+        url='https://github.com/ip7z/7zip/releases/download/26.06/7zr.exe'
+        sha256='e80db2dad715a6c5adabe292d31ed54e11f4e9b99ca349827b50573b175891bc'
+        size=[long]600064
     }
-    $null = Invoke-RadioComponentProcess $tar @('-xf', $Archive, '-C', $Destination, '--no-same-owner', '--no-same-permissions') $Destination 120
 }
 
+function Expand-RadioMpvArchive([string]$Archive, [string]$Destination) {
+    $tar = Join-Path ([Environment]::GetFolderPath('System')) 'tar.exe'
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    if (Test-Path -LiteralPath $tar -PathType Leaf) {
+        try {
+            $list = Invoke-RadioComponentProcess $tar @('-tf', $Archive) $Destination 60
+            $paths = @($list.Output -split '\r?\n' | Where-Object { $_ })
+            if (-not $paths.Count -or $paths.Count -gt 5000) { throw 'Unexpected MPV archive entry count.' }
+            foreach ($path in $paths) { $null = Get-RadioComponentChildPath $Destination $path }
+            $details = Invoke-RadioComponentProcess $tar @('-tvf', $Archive) $Destination 60
+            $detailLines = @($details.Output -split '\r?\n' | Where-Object { $_ })
+            if ($detailLines.Count -ne $paths.Count) { throw 'The MPV archive listing could not be verified completely.' }
+            foreach ($line in $detailLines) {
+                if ($line -cnotmatch '^[-d][rwxStTs-]{9}\s') { throw 'The MPV archive contains an unsupported link or entry type.' }
+            }
+            $null = Invoke-RadioComponentProcess $tar @('-xf', $Archive, '-C', $Destination, '--no-same-owner', '--no-same-permissions') $Destination 120
+            return
+        } catch {
+            # Unsupported LZMA is a known failure of the Windows 10/Server 2022
+            # libarchive build. Other archive failures remain fatal.
+            if ($_.Exception.Message -notmatch '(?i)LZMA codec is unsupported') { throw }
+            Write-Host 'Windows tar cannot read this MPV archive; using a verified 7-Zip extractor.'
+        }
+    } else {
+        Write-Host 'Windows tar is unavailable; using a verified 7-Zip extractor.'
+    }
+
+    $component = Get-RadioSevenZipComponent
+    $extractor = Join-Path (Split-Path -Parent $Archive) '7zr.exe'
+    Get-RadioComponentDownload $component $extractor
+    Assert-RadioComponentDownload $component $extractor
+    $listing = Invoke-RadioComponentProcess $extractor @('l', '-slt', $Archive) $Destination 60
+    $separator = [regex]::Match($listing.Output, '(?m)^----------\r?$')
+    if (-not $separator.Success) { throw '7-Zip could not produce a trustworthy MPV archive listing.' }
+    $entryText = $listing.Output.Substring($separator.Index + $separator.Length)
+    $blocks = @([regex]::Split($entryText, '(?m)(?=^Path = )') | Where-Object { $_ -match '(?m)^Path = ' })
+    if (-not $blocks.Count -or $blocks.Count -gt 5000) { throw 'Unexpected 7-Zip MPV archive entry count.' }
+    foreach ($block in $blocks) {
+        $match = [regex]::Match($block, '(?m)^Path = (?<path>[^\r\n]+)')
+        if (-not $match.Success) { throw 'Unexpected 7-Zip MPV archive entry.' }
+        $null = Get-RadioComponentChildPath $Destination $match.Groups['path'].Value
+        if ($block -match '(?im)^(Symbolic Link|Hard Link) = .+' -or $block -match '(?im)^Attributes = [^\r\n]*[lL]') {
+            throw 'The MPV archive contains an unsupported link.'
+        }
+    }
+    # The destination is a fresh staging directory. No unverified archive/helper
+    # is executed, and the unpacked bundle is checked for links before activation.
+    $null = Invoke-RadioComponentProcess $extractor @('x', '-y', ('-o' + $Destination), $Archive) $Destination 120
+    $null = @(Get-RadioComponentFiles $Destination)
+}
 function Expand-RadioDenoArchive([string]$Archive, [string]$Destination) {
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -374,7 +418,7 @@ function Install-RadioComponents([string]$Root, [string]$LockPath, [switch]$Only
 
 if ($FunctionsOnly) { return }
 try {
-    if ($env:OS -ne 'Windows_NT' -or $PSVersionTable.PSEdition -ne 'Desktop' -or -not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess) { throw 'Run this setup with 64-bit Windows PowerShell 5.1 on Windows 11 x64.' }
+    if ($env:OS -ne 'Windows_NT' -or $PSVersionTable.PSEdition -ne 'Desktop' -or -not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess) { throw 'Run this setup with 64-bit Windows PowerShell 5.1 on Windows 10 (2004+) or Windows 11 x64.' }
     if ($CheckOnly -and $Repair) { throw 'Choose CheckOnly or Repair, not both.' }
     if (-not $ManifestPath) { $ManifestPath = Join-Path $PSScriptRoot 'components.lock.json' }
     $result = Install-RadioComponents -Root $DataRoot -LockPath $ManifestPath -OnlyCheck:$CheckOnly -ForceRepair:$Repair
