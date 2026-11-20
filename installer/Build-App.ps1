@@ -74,7 +74,7 @@ foreach ($name in @('Radio.ps1','Check-Radio.ps1','Radio-Hidden.cs','Build-Hidde
 Copy-Item -LiteralPath (Join-Path $repo 'payload\portable_config') -Destination $engine -Recurse
 & (Join-Path $repo 'payload\Build-HiddenStarter.ps1') -OutputPath (Join-Path $engine 'Radio-Hidden.exe')
 
-$portable = Join-Path $OutputDirectory 'Automatic-Music-0.2.0-beta.1-portable.zip'
+$portable = Join-Path $OutputDirectory 'Automatic-Music-0.2.0-beta.2-portable.zip'
 Compress-Archive -LiteralPath $package -DestinationPath $portable -CompressionLevel Optimal
 if (-not $SkipInstaller) {
     $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
@@ -89,4 +89,4 @@ $hashes = @(Get-ChildItem -LiteralPath $OutputDirectory -File | Where-Object { $
     (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name
 })
 [IO.File]::WriteAllLines((Join-Path $OutputDirectory 'SHA256SUMS.txt'), $hashes, [Text.UTF8Encoding]::new($false))
-Write-Host "Built Automatic Music 0.2.0-beta.1: $OutputDirectory"
+Write-Host "Built Automatic Music 0.2.0-beta.2: $OutputDirectory"
