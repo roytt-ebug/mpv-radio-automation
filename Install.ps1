@@ -1,4 +1,4 @@
-# MPV Radio Automation setup helper, guided setup revision 9.
+# MPV Radio Automation setup helper, guided setup revision 10.
 # Requires Windows PowerShell 5.1. MPV must already be installed in C:\MPV.
 # -FunctionsOnly is for offline parser tests; it does not run installation.
 param(
@@ -329,6 +329,99 @@ function Install-VerifiedYtDlp([string]$MpvFolder) {
     }
 }
 
+function Initialize-RadioSamplingConfig([string]$Source, [string]$Destination) {
+    # Sampling preferences belong to the listener, not to a particular setup run.
+    # Copy defaults once; even comments/line endings in an existing file survive.
+    if (Test-Path -LiteralPath $Destination -PathType Leaf) { return }
+    if (Test-Path -LiteralPath $Destination) { throw "$Destination exists but is not a file." }
+    New-Item -ItemType Directory -Path (Split-Path -Parent $Destination) -Force | Out-Null
+    [IO.File]::Copy($Source, $Destination, $false)
+}
+
+function Get-MpvConfigValueSuffix([string]$Value) {
+    # Keep an audio-device line's trailing whitespace/comment. Quoted '#' and
+    # mpv's %byte-count% quoting are part of the value, not inline comments.
+    $suffix = ''
+    if ($Value.StartsWith('"') -or $Value.StartsWith("'")) {
+        $end = $Value.IndexOf($Value[0], 1)
+        if ($end -lt 0) { throw 'Unclosed audio-device quote in mpv.conf. The file was not changed.' }
+        $suffix = $Value.Substring($end + 1)
+    } elseif ($Value -cmatch '^%(?<count>[0-9]+)%') {
+        $prefixLength = $Matches[0].Length
+        $count = 0
+        if (-not [int]::TryParse($Matches.count, [ref]$count)) { throw 'Invalid audio-device byte count in mpv.conf. The file was not changed.' }
+        $utf8 = New-Object Text.UTF8Encoding($false, $true)
+        $bytes = $utf8.GetBytes($Value.Substring($prefixLength))
+        if ($count -gt $bytes.Length) { throw 'Truncated audio-device value in mpv.conf. The file was not changed.' }
+        $suffix = $utf8.GetString($bytes, $count, $bytes.Length - $count)
+    } else {
+        return [regex]::Match($Value, '[ \t]*(?:#.*)?$').Value
+    }
+    if ($suffix -cnotmatch '^[ \t]*(?:#.*)?$') { throw 'Unexpected text after audio-device in mpv.conf. The file was not changed.' }
+    return $suffix
+}
+
+function Update-RadioMpvConfig([string]$Path, [string]$DeviceId) {
+    if (-not $DeviceId -or $DeviceId -match '[\x00\r\n]') { throw 'Select a valid audio device.' }
+    $utf8 = New-Object Text.UTF8Encoding($false, $true)
+    $value = $DeviceId
+    # Device IDs normally need no quoting; fixed-length quoting also handles
+    # unusual device names without allowing a newline or comment injection.
+    if ($DeviceId -match '[#"'']|^%|^[ \t]|[ \t]$') {
+        $value = '%' + $utf8.GetByteCount($DeviceId) + '%' + $DeviceId
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        if (Test-Path -LiteralPath $Path) { throw "$Path exists but is not a file." }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
+        $lines = [string[]]@("audio-device=$value", 'vid=no', 'ytdl-format=bestaudio/best', 'force-window=yes')
+        [IO.File]::WriteAllLines($Path, $lines, $utf8)
+        return
+    }
+    $original = [IO.File]::ReadAllBytes($Path)
+    $bom = $original.Length -ge 3 -and $original[0] -eq 239 -and $original[1] -eq 187 -and $original[2] -eq 191
+    $offset = 0; if ($bom) { $offset = 3 }
+    # mpv configuration is UTF-8. Refuse incompatible/corrupt text instead of
+    # silently replacing bytes in settings that setup does not own.
+    try { $text = $utf8.GetString($original, $offset, $original.Length - $offset) }
+    catch { throw 'mpv.conf must be valid UTF-8 before setup can change its audio device. The file was not changed.' }
+    $result = New-Object Text.StringBuilder
+    $inGlobalSection = $true; $found = $false
+    foreach ($lineMatch in [regex]::Matches($text, '(?<line>[^\r\n]*)(?<eol>\r\n|\r|\n|$)')) {
+        if ($lineMatch.Length -eq 0) { continue }
+        $line = $lineMatch.Groups['line'].Value
+        $eol = $lineMatch.Groups['eol'].Value
+        if ($line -cmatch '^[ \t]*\[(?<profile>[^\]\r\n]*)\][ \t]*(?:#.*)?$') {
+            # [default] and [] resume global options; named profiles stay untouched.
+            $inGlobalSection = $Matches.profile -ceq 'default' -or $Matches.profile -ceq ''
+        } elseif ($inGlobalSection -and $line -cmatch '^(?<prefix>[ \t]*(?:--)?audio-device[ \t]*=[ \t]*)(?<value>.*)$') {
+            $prefix = $Matches.prefix; $oldValue = $Matches.value
+            $line = $prefix + $value + (Get-MpvConfigValueSuffix $oldValue)
+            $found = $true
+        }
+        [void]$result.Append($line).Append($eol)
+    }
+    if (-not $found) {
+        $newline = [regex]::Match($text, '\r\n|\r|\n').Value
+        if (-not $newline) { $newline = [Environment]::NewLine }
+        # Prepend in global scope even if the file ends inside a named profile.
+        [void]$result.Insert(0, "audio-device=$value" + $newline)
+    }
+    $updated = $result.ToString()
+    if ($updated -ceq $text) { return }
+    $bytes = $utf8.GetBytes($updated)
+    if ($bom) { $bytes = [byte[]](@(239,187,191) + $bytes) }
+    $temporary = $Path + '.setup-' + [guid]::NewGuid().ToString('N')
+    try {
+        [IO.File]::WriteAllBytes($temporary, $bytes)
+        # Keep the existing file intact until its complete replacement is ready.
+        # PowerShell 5.1 converts ordinary $null to an empty string for this
+        # .NET string parameter. NullString passes the intended null backup path.
+        [IO.File]::Replace($temporary, $Path, [NullString]::Value)
+    } finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+    }
+}
+
 # Tests import only the functions above. No Windows calls, files or downloads.
 if ($FunctionsOnly) { return }
 
@@ -352,7 +445,7 @@ try {
     }
     $sid = New-Object Security.Principal.SecurityIdentifier($TaskUserSid)
     $taskUser = $sid.Translate([Security.Principal.NTAccount]).Value
-    Write-Host "`nMPV Radio Automation - guided setup (revision 9)" -ForegroundColor Cyan
+    Write-Host "`nMPV Radio Automation - guided setup (revision 10)" -ForegroundColor Cyan
     Write-Host 'Type only your answer, then press Enter. Do not type the prompt or [brackets].'
     Write-Host 'Press Enter to accept a displayed default. Type Q at any input prompt to cancel.'
     Write-Host ("Computer time now: " + (Get-Date).ToString('yyyy-MM-dd HH:mm (h:mm tt)', [cultureinfo]::InvariantCulture))
@@ -434,7 +527,8 @@ try {
     })
     foreach ($old in $otherMpv) { Write-Warning "Existing task '$($old.TaskName)' will remain unchanged. Check for overlapping schedules." }
     Write-Host "`nScheduled starts use one MPV window; sampling ends with a simple fade-out."
-    Write-Host 'Sampling ON: recordings 15+ minutes; sections 10-30 minutes (or remaining content).'
+    Write-Host 'New setups default to sampling ON: recordings 15+ minutes; sections 10-30 minutes.'
+    Write-Host 'Existing sampling preferences and other MPV settings will be kept; only the selected global audio device changes.'
     Write-Host 'Only this installation''s radio player is stopped when the next radio session starts.'
     Write-Host 'The launcher and Lua enforce your duration; Task Scheduler allows one extra minute for cleanup.'
     Write-Host 'Setup builds Radio-Hidden.exe from included source using Windows .NET; PowerShell runs without a console.'
@@ -485,11 +579,14 @@ try {
     foreach ($relative in $payloadFiles) {
         $destination = Join-Path $InstallDir $relative
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $PayloadDir $relative) -Destination $destination -Force
+        if ($relative -eq 'portable_config\script-opts\random-start.conf') {
+            Initialize-RadioSamplingConfig (Join-Path $PayloadDir $relative) $destination
+        } else {
+            Copy-Item -LiteralPath (Join-Path $PayloadDir $relative) -Destination $destination -Force
+        }
     }
     Move-Item -LiteralPath $builtStarter -Destination (Join-Path $InstallDir 'Radio-Hidden.exe') -Force
-    $configLines = [string[]]@("audio-device=$($audio.Id)",'vid=no','ytdl-format=bestaudio/best','force-window=yes')
-    [IO.File]::WriteAllLines("$InstallDir\portable_config\mpv.conf", $configLines, (New-Object Text.UTF8Encoding($false)))
+    Update-RadioMpvConfig "$InstallDir\portable_config\mpv.conf" $audio.Id
     foreach ($session in $sessions) {
         $stage = 'registering ' + $session.Name
         Register-ScheduledTask -TaskName $session.Name -TaskPath '\' -InputObject $definitions[$session.Name] -Force | Out-Null
@@ -511,7 +608,7 @@ try {
     }
     Write-Host "`nSetup completed. Backup folder: $backup" -ForegroundColor Green
     Write-Host 'Open Task Scheduler, right-click a configured music task, and choose Run to test.'
-    Write-Host 'MPV itself was not installed or replaced. Existing history files were kept.'
+    Write-Host 'MPV itself was not installed or replaced. Existing settings and histories were kept; the selected global audio device was updated.'
     [void](Read-Host 'Press Enter to close')
 } catch [System.OperationCanceledException] {
     Write-Host 'Setup cancelled. No changes applied.'

@@ -19,3 +19,11 @@ Downloads/
 
 radio-session.json*
 radio-stop.request
+
+# Compiled desktop application and installer artifacts
+dist/
+artifacts/
+app/*.exe
+app/*.ico
+installer/*.exe
+*.pdb

@@ -1,9 +1,12 @@
 @echo off
-cd /d C:\MPV
-if not exist yt-dlp.exe (
-    echo yt-dlp.exe was not found in C:\MPV
+setlocal
+if not exist "%~dp0yt-dlp.exe" (
+    echo yt-dlp.exe was not found beside this update shortcut.
     pause
     exit /b 1
 )
-yt-dlp.exe -U
+"%~dp0yt-dlp.exe" -U
+set "radio_update_exit=%ERRORLEVEL%"
+if not "%radio_update_exit%"=="0" echo yt-dlp update failed with exit code %radio_update_exit%.
 pause
+exit /b %radio_update_exit%

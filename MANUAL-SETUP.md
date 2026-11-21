@@ -795,7 +795,7 @@ Open the extracted project's **`payload`** folder in one File Explorer window an
 | `Build-HiddenStarter.ps1` | Builds that helper using Windows PowerShell and .NET. |
 | `Check-Radio.ps1` | Checks whether MPV and the Lua script respond. |
 | `Check Radio.cmd` | Opens the check above when double-clicked. |
-| `Stop Radio.cmd` | Stops this installation's radio. |
+| `Stop Radio.cmd` | Stops this installation's scheduled or manual playback. |
 
 Copy the **files themselves**, not an extra `payload` folder. In `C:\MPV`, confirm that these six files now appear beside `mpv.exe`.
 
@@ -1008,7 +1008,7 @@ The project's extracted `payload` folder also contains:
 
 After copying the files, right-click each desired `.cmd` in `C:\MPV` and choose **Send to → Desktop (create shortcut)**. On Windows 11, choose **Show more options** first if Send to is not visible. Keep the original files in `C:\MPV`.
 
-To use a playback shortcut, copy one complete YouTube URL from your browser, then double-click the audio or video shortcut. It stops this installation's radio and opens normal manual playback without updating radio histories. Video stays on top. Command windows opened by manual shortcuts or diagnostics are separate from the hidden scheduled-start helper.
+To use a playback shortcut, copy one complete YouTube URL from your browser, then double-click the audio or video shortcut. It replaces this installation's previous scheduled or manual player and opens normal manual playback without updating radio histories. **Stop Radio** controls either mode, while unrelated MPV windows remain open. Video stays on top. Both playback modes use `Radio-Hidden.exe`; a shortcut's initial command window or a diagnostics window is separate from that hidden supervisor. **Check Radio** is intended for scheduled mode because manual playback deliberately does not load the radio Lua script.
 
 ### If a step fails
 

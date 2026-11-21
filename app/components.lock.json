@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "bundle": "2026.11.20-2",
+  "architecture": "x64",
+  "components": [
+    {
+      "id": "mpv",
+      "version": "0.42.0",
+      "url": "https://github.com/mpv-player/mpv/releases/download/v0.42.0/mpv-v0.42.0-x86_64-pc-windows-msvc.zip",
+      "sha256": "8dd69cbab079086765fa5d873c09513b2834b85d146c1301718a757e8c0595ef",
+      "size": 28696222,
+      "format": "zip"
+    },
+    {
+      "id": "ytDlp",
+      "version": "2026.10.26",
+      "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.exe",
+      "sha256": "f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d",
+      "size": 23575744,
+      "format": "exe"
+    },
+    {
+      "id": "deno",
+      "version": "2.9.8",
+      "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip",
+      "sha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+      "size": 42917472,
+      "format": "zip"
+    }
+  ]
+}

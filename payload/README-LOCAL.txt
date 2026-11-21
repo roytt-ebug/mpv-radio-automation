@@ -57,7 +57,10 @@ CONTROLS
 Space = pause/resume; > = next; 9/0 = volume; Q = quit.
 F8 in MPV shows the loaded script and settings.
 Check Radio.cmd checks that the scheduled player and Lua script respond.
-Stop Radio.cmd stops this installation's radio.
+Stop Radio.cmd stops this installation's scheduled or manual playback.
+Starting another clipboard or scheduled session replaces its previous player;
+unrelated MPV windows are left alone. Manual playback does not update radio
+histories. Check Radio.cmd is for scheduled mode, which loads the radio script.
 Clipboard audio/video shortcuts play normally without radio-history updates.
 
 HISTORY
