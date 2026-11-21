@@ -66,11 +66,9 @@ speaker, firewall, Windows logon settings or persistent PowerShell policy.
 The app automatically downloads its pinned components directly from their
 upstream release providers. Each download must match the SHA-256 recorded in
 `components.lock.json` before extraction or execution. The install then runs
-bounded version checks. MPV's complete archive is extracted using Windows'
-`tar.exe` when its codec is supported. Older Windows builds that lack LZMA
-support automatically download and SHA-256-verify a pinned, standalone official
-7-Zip `7zr.exe` (approximately 600 KB) to extract MPV. No separate archiver
-installation or manual steps are required.
+bounded version checks. MPV's official versioned Windows ZIP comes from the
+`mpv-player/mpv` release and includes its required Vulkan loader. Windows' .NET
+ZIP libraries unpack it safely without needing 7-Zip or a separate archiver.
 
 Repair prepares a separate component bundle and activates it only after all
 checks pass. A failed repair preserves the previous active bundle. Working
