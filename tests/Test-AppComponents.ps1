@@ -37,12 +37,13 @@ New-Item -ItemType Directory -Path $work | Out-Null
 try {
     $manifest = Read-RadioComponentManifest $componentLockPath
     Assert-Component ($manifest.components.Count -eq 3) 'packaged lock contains all three official components'
-    $sevenZip = Get-RadioSevenZipComponent
-    Assert-Component ($sevenZip.url -ceq 'https://github.com/ip7z/7zip/releases/download/26.06/7zr.exe' -and $sevenZip.sha256 -ceq 'e80db2dad715a6c5adabe292d31ed54e11f4e9b99ca349827b50573b175891bc' -and $sevenZip.size -eq 600064) 'Windows 10 LZMA extractor is pinned to official 7-Zip release with SHA-256 and size'
     foreach ($version in @('v0.42.0-12-gbcde6b9', 'v0.42.0-12-gbcde6b93c', 'v0.42.0-12-gbcde6b93cc', 'v0.42.0-12-gbcde6b93cc45', 'v0.42.0-dev-gbcde6b93c', 'bcde6b93c', 'v0.42.0-12-gbcde6b93c-dirty')) {
         Assert-Component (Test-RadioMpvVersionOutput ("mpv $version Copyright fixture") 'bcde6b93cc') ('accept matching MPV Git abbreviation ' + $version)
     }
     Assert-Component (Test-RadioMpvVersionOutput 'mpv v0.42.0-12-gbcde6b93cc' 'bcde6b9') 'accept a reported hash longer than the pinned abbreviation'
+    Assert-Component (Test-RadioMpvVersionOutput 'mpv v0.42.0 Copyright fixture' '0.42.0') 'official stable MPV version is recognized'
+    Assert-Component (-not (Test-RadioMpvVersionOutput 'mpv v0.42.1 Copyright fixture' '0.42.0')) 'reject different stable MPV version'
+    Assert-Component (-not (Test-RadioMpvVersionOutput 'mpv v0.42.01 Copyright fixture' '0.42.0')) 'reject ambiguous stable MPV version'
     foreach ($output in @('mpv v0.42.0-12-gdeadbee12', 'mpv v0.42.0-12-gbcde6b8', 'mpv v0.42.0-12-gbcde6b', 'mpv v0.42.0', "mpv v0.42.0-12-gdeadbee12`nFFmpeg version gbcde6b93cc")) {
         Assert-Component (-not (Test-RadioMpvVersionOutput $output 'bcde6b93cc')) ('reject unmatched or absent MPV Git hash: ' + $output)
     }
@@ -69,10 +70,10 @@ public static class ComponentFixture {
         string name = Path.GetFileName(Environment.GetCommandLineArgs()[0]);
         if (name == "mpv.exe" || name == "mpv.com") {
             if (Environment.GetEnvironmentVariable("AUTOMATIC_MUSIC_TEST_MODE") == "wrong-version") {
-                Console.WriteLine("mpv v0.42.0-12-gdeadbee12 Copyright fixture");
+                Console.WriteLine("mpv v0.42.1 Copyright fixture");
                 Console.WriteLine(new string('x', 2048));
                 Console.Error.WriteLine("fixture diagnostic");
-            } else Console.WriteLine("mpv v0.42.0-12-gbcde6b93c Copyright fixture");
+            } else Console.WriteLine("mpv v0.42.0 Copyright fixture");
         }
         else if (name == "yt-dlp.exe") Console.WriteLine("2026.10.26");
         else if (name == "deno.exe") Console.WriteLine("deno 2.9.8");
@@ -87,7 +88,7 @@ public static class ComponentFixture {
     $env:AUTOMATIC_MUSIC_TEST_PROBE = $script:componentProbe
     $env:AUTOMATIC_MUSIC_TEST_MODE = ''
     $script:componentArchives = @{
-        mpv=(Join-Path $work 'mpv-fixture.7z');
+        mpv=(Join-Path $work 'mpv-fixture.zip');
         ytDlp=$script:componentFixtureExe;
         deno=(Join-Path $work 'deno-fixture.zip')
     }
@@ -130,7 +131,7 @@ public static class ComponentFixture {
     $versionError = ''
     try { Test-RadioComponentVersions $first.directory $first.versions } catch { $versionError = $_.Exception.Message }
     finally { $env:AUTOMATIC_MUSIC_TEST_MODE = '' }
-    Assert-Component ($versionError -like '*deadbee12*' -and $versionError -like '*fixture diagnostic*') 'wrong native MPV version is rejected with stdout and stderr diagnostics'
+    Assert-Component ($versionError -like '*v0.42.1*' -and $versionError -like '*fixture diagnostic*') 'wrong native MPV version is rejected with stdout and stderr diagnostics'
     Assert-Component ($versionError.Contains('[truncated]') -and $versionError.Length -lt 2300) 'version diagnostic output is bounded'
     $pointer = Join-Path $data 'components.json'
     $pointerHash = Get-ComponentTestHash $pointer
@@ -174,6 +175,9 @@ public static class ComponentFixture {
     Assert-ComponentRejected { Install-RadioComponents -Root $data -LockPath $fixtureLock -OnlyCheck } 'reject component pointer outside app-owned directory'
     [IO.File]::WriteAllBytes($pointer, $pointerBytes)
 
+    $mpvMissingLoader = Join-Path $work 'mpv-missing-loader.zip'
+    New-ComponentTestZip $mpvMissingLoader 'mpv.exe' $script:componentFixtureExe
+    Assert-ComponentRejected { & $originalMpvExpand $mpvMissingLoader (Join-Path $work 'mpv-missing-loader') } 'MPV ZIP without Vulkan loader and mpv.com is rejected'
     $evilZip = Join-Path $work 'traversal.zip'
     $unpack = Join-Path $work 'safe-unpack'
     New-ComponentTestZip $evilZip '../escaped.exe' $script:componentFixtureExe
