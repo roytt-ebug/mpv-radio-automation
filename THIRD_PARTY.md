@@ -8,8 +8,8 @@ Project: https://mpv.io/
 
 Source: https://github.com/mpv-player/mpv
 
-Windows builds used during development:
-https://github.com/shinchiro/mpv-winbuild-cmake/releases
+Versioned official Windows releases used by this desktop app:
+https://github.com/mpv-player/mpv/releases
 
 MPV is GPLv2-or-later by default. MPV can also be built under LGPLv2.1-or-later when GPL-only code is excluded, but linked libraries can affect the license of a particular binary.
 
@@ -40,13 +40,9 @@ installer or portable ZIP.
 Deno project/source and licensing information:
 https://github.com/denoland/deno
 
-The app uses Windows' existing `tar.exe` and .NET Framework libraries where
-possible. On Windows builds where the built-in `tar.exe` cannot decode MPV's
-LZMA-compressed 7z archive, the app automatically downloads the official,
-pinned 7-Zip `7zr.exe` 26.06 from the upstream GitHub release, verifies its
-600,064-byte size and SHA-256 before running, then uses it only for extraction.
-7-Zip source and licensing information: https://github.com/ip7z/7zip .
-The project installer does not redistribute 7-Zip or a .NET runtime.
+The app uses Windows' .NET Framework ZIP support to unpack the official MPV
+release that includes the Vulkan loader. It does not redistribute MPV, 7-Zip,
+or a separate .NET runtime.
 
 ## Project code
 
