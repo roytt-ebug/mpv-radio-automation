@@ -227,14 +227,14 @@ function Get-RadioComponentFiles([string]$Directory) {
 }
 
 function Test-RadioMpvVersionOutput([string]$Output, [string]$ExpectedHash) {
-    # Inspect MPV's own header, not FFmpeg or other linked-library versions.
-    $header = [regex]::Match($Output, '(?im)^[	 ]*mpv[	 ]+(?<version>S+)')
+    # Use MPV's own header, not linked FFmpeg/library version numbers.
+    $header = [regex]::Match($Output, '(?im)^[\t ]*mpv[\t ]+(?<version>\S+)')
     if (-not $header.Success) { return $false }
-    if ($ExpectedHash -match 'A[0-9]+.[0-9]+.[0-9]+z') {
+    if ($ExpectedHash -match '\A[0-9]+\.[0-9]+\.[0-9]+\z') {
         return $header.Groups['version'].Value -ceq ('v' + $ExpectedHash)
     }
-    if ($ExpectedHash -notmatch 'A[0-9a-f]{7,40}z') { return $false }
-    $match = [regex]::Match($header.Groups['version'].Value, '(?i)(?:-g|^g?)(?<hash>[0-9a-f]{7,40})(?:-dirty)?
+    if ($ExpectedHash -notmatch '\A[0-9a-f]{7,40}\z') { return $false }
+    $match = [regex]::Match($header.Groups['version'].Value, '(?i)(?:-g|^g?)(?<hash>[0-9a-f]{7,40})(?:-dirty)?$')
     if (-not $match.Success) { return $false }
     $reportedHash = $match.Groups['hash'].Value
     return ($ExpectedHash.StartsWith($reportedHash, [StringComparison]::OrdinalIgnoreCase) -or $reportedHash.StartsWith($ExpectedHash, [StringComparison]::OrdinalIgnoreCase))
