@@ -57,9 +57,8 @@ function Read-RadioComponentManifest([string]$Path) {
         $expected = ''
         switch -CaseSensitive ($component.id) {
             'mpv' {
-                if ($component.version -cnotmatch '\A(?<date>[0-9]{8})-git-[0-9a-f]{7,40}\z' -or $component.format -cne '7z') { throw 'Invalid baseline x64 MPV component.' }
-                $date = $Matches.date
-                $expected = 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/' + $date + '/mpv-x86_64-' + $component.version + '.7z'
+                if ($component.version -cnotmatch '\A[0-9]+\.[0-9]+\.[0-9]+\z' -or $component.format -cne 'zip') { throw 'Invalid official x64 MPV component.' }
+                $expected = 'https://github.com/mpv-player/mpv/releases/download/v' + $component.version + '/mpv-v' + $component.version + '-x86_64-pc-windows-msvc.zip'
             }
             'ytDlp' {
                 if ($component.version -cnotmatch '\A[0-9]{4}\.[0-9]{2}\.[0-9]{2}\z' -or $component.format -cne 'exe') { throw 'Invalid yt-dlp component.' }
@@ -158,67 +157,16 @@ function Assert-RadioComponentDownload($Component, [string]$Path) {
     Write-Host "Verified $($Component.id) download."
 }
 
-# A pinned, reduced official 7-Zip extractor for Windows builds whose built-in
-# bsdtar lacks LZMA support. It is downloaded only when necessary, never bundled.
-function Get-RadioSevenZipComponent {
-    return [pscustomobject]@{
-        id='sevenZip'
-        version='26.06'
-        url='https://github.com/ip7z/7zip/releases/download/26.06/7zr.exe'
-        sha256='e80db2dad715a6c5adabe292d31ed54e11f4e9b99ca349827b50573b175891bc'
-        size=[long]600064
-    }
-}
-
+# Upstream mpv-player's signed-release artifact includes mpv.exe, mpv.com and
+# the Vulkan loader (needed even for audio-only starts on some Windows systems).
+# Reuse our path-safe, bounded ZIP extractor below.
 function Expand-RadioMpvArchive([string]$Archive, [string]$Destination) {
-    $tar = Join-Path ([Environment]::GetFolderPath('System')) 'tar.exe'
-    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-    if (Test-Path -LiteralPath $tar -PathType Leaf) {
-        try {
-            $list = Invoke-RadioComponentProcess $tar @('-tf', $Archive) $Destination 60
-            $paths = @($list.Output -split '\r?\n' | Where-Object { $_ })
-            if (-not $paths.Count -or $paths.Count -gt 5000) { throw 'Unexpected MPV archive entry count.' }
-            foreach ($path in $paths) { $null = Get-RadioComponentChildPath $Destination $path }
-            $details = Invoke-RadioComponentProcess $tar @('-tvf', $Archive) $Destination 60
-            $detailLines = @($details.Output -split '\r?\n' | Where-Object { $_ })
-            if ($detailLines.Count -ne $paths.Count) { throw 'The MPV archive listing could not be verified completely.' }
-            foreach ($line in $detailLines) {
-                if ($line -cnotmatch '^[-d][rwxStTs-]{9}\s') { throw 'The MPV archive contains an unsupported link or entry type.' }
-            }
-            $null = Invoke-RadioComponentProcess $tar @('-xf', $Archive, '-C', $Destination, '--no-same-owner', '--no-same-permissions') $Destination 120
-            return
-        } catch {
-            # Unsupported LZMA is a known failure of the Windows 10/Server 2022
-            # libarchive build. Other archive failures remain fatal.
-            if ($_.Exception.Message -notmatch '(?i)LZMA codec is unsupported') { throw }
-            Write-Host 'Windows tar cannot read this MPV archive; using a verified 7-Zip extractor.'
-        }
-    } else {
-        Write-Host 'Windows tar is unavailable; using a verified 7-Zip extractor.'
-    }
-
-    $component = Get-RadioSevenZipComponent
-    $extractor = Join-Path (Split-Path -Parent $Archive) '7zr.exe'
-    Get-RadioComponentDownload $component $extractor
-    Assert-RadioComponentDownload $component $extractor
-    $listing = Invoke-RadioComponentProcess $extractor @('l', '-slt', $Archive) $Destination 60
-    $separator = [regex]::Match($listing.Output, '(?m)^----------\r?$')
-    if (-not $separator.Success) { throw '7-Zip could not produce a trustworthy MPV archive listing.' }
-    $entryText = $listing.Output.Substring($separator.Index + $separator.Length)
-    $blocks = @([regex]::Split($entryText, '(?m)(?=^Path = )') | Where-Object { $_ -match '(?m)^Path = ' })
-    if (-not $blocks.Count -or $blocks.Count -gt 5000) { throw 'Unexpected 7-Zip MPV archive entry count.' }
-    foreach ($block in $blocks) {
-        $match = [regex]::Match($block, '(?m)^Path = (?<path>[^\r\n]+)')
-        if (-not $match.Success) { throw 'Unexpected 7-Zip MPV archive entry.' }
-        $null = Get-RadioComponentChildPath $Destination $match.Groups['path'].Value
-        if ($block -match '(?im)^(Symbolic Link|Hard Link) = .+' -or $block -match '(?im)^Attributes = [^\r\n]*[lL]') {
-            throw 'The MPV archive contains an unsupported link.'
+    Expand-RadioDenoArchive $Archive $Destination
+    foreach ($required in @('mpv.exe', 'mpv.com', 'vulkan-1.dll')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Destination $required) -PathType Leaf)) {
+            throw "The official MPV archive is missing $required."
         }
     }
-    # The destination is a fresh staging directory. No unverified archive/helper
-    # is executed, and the unpacked bundle is checked for links before activation.
-    $null = Invoke-RadioComponentProcess $extractor @('x', '-y', ('-o' + $Destination), $Archive) $Destination 120
-    $null = @(Get-RadioComponentFiles $Destination)
 }
 function Expand-RadioDenoArchive([string]$Archive, [string]$Destination) {
     Add-Type -AssemblyName System.IO.Compression
@@ -279,12 +227,14 @@ function Get-RadioComponentFiles([string]$Directory) {
 }
 
 function Test-RadioMpvVersionOutput([string]$Output, [string]$ExpectedHash) {
-    if ($ExpectedHash -notmatch '\A[0-9a-f]{7,40}\z') { return $false }
-    # MPV's git describe uses --abbrev=9; release asset names can use a
-    # different abbreviation. Read only MPV's version token, not library hashes.
-    $header = [regex]::Match($Output, '(?im)^[\t ]*mpv[\t ]+(?<version>\S+)')
+    # Inspect MPV's own header, not FFmpeg or other linked-library versions.
+    $header = [regex]::Match($Output, '(?im)^[	 ]*mpv[	 ]+(?<version>S+)')
     if (-not $header.Success) { return $false }
-    $match = [regex]::Match($header.Groups['version'].Value, '(?i)(?:-g|^g?)(?<hash>[0-9a-f]{7,40})(?:-dirty)?$')
+    if ($ExpectedHash -match 'A[0-9]+.[0-9]+.[0-9]+z') {
+        return $header.Groups['version'].Value -ceq ('v' + $ExpectedHash)
+    }
+    if ($ExpectedHash -notmatch 'A[0-9a-f]{7,40}z') { return $false }
+    $match = [regex]::Match($header.Groups['version'].Value, '(?i)(?:-g|^g?)(?<hash>[0-9a-f]{7,40})(?:-dirty)?
     if (-not $match.Success) { return $false }
     $reportedHash = $match.Groups['hash'].Value
     return ($ExpectedHash.StartsWith($reportedHash, [StringComparison]::OrdinalIgnoreCase) -or $reportedHash.StartsWith($ExpectedHash, [StringComparison]::OrdinalIgnoreCase))
@@ -381,7 +331,151 @@ function Install-RadioComponents([string]$Root, [string]$LockPath, [switch]$Only
             Assert-RadioComponentDownload $component $download
         }
         Write-Host 'Extracting verified components...'
-        Expand-RadioMpvArchive (Join-Path $downloads 'mpv.7z') $bundle
+        Expand-RadioMpvArchive (Join-Path $downloads 'mpv.zip') $bundle
+        Expand-RadioDenoArchive (Join-Path $downloads 'deno.zip') $bundle
+        [IO.File]::Copy((Join-Path $downloads 'ytDlp.exe'), (Join-Path $bundle 'yt-dlp.exe'), $false)
+        $versions = [ordered]@{}
+        foreach ($component in $manifest.components) { $versions[$component.id] = $component.version }
+        $files = @(Get-RadioComponentFiles $bundle)
+        Test-RadioComponentVersions $bundle $versions
+        $installedUtc = [datetime]::UtcNow.ToString('o')
+        $receipt = [ordered]@{ schema=1; bundle=$manifest.bundle; manifestSha256=$manifestHash; versions=$versions; files=$files; installedUtc=$installedUtc }
+        Write-RadioComponentJson (Join-Path $bundle 'bundle.json') $receipt
+        $componentsRoot = Join-Path $rootPath 'Components'
+        Assert-RadioComponentPath $componentsRoot
+        New-Item -ItemType Directory -Path $componentsRoot -Force | Out-Null
+        $destination = Join-Path $componentsRoot $manifest.bundle
+        if (Test-Path -LiteralPath $destination) { $destination += '-repair-' + [guid]::NewGuid().ToString('N') }
+        [IO.Directory]::Move($bundle, $destination)
+        $pointer = [ordered]@{ schema=1; bundle=$manifest.bundle; directory=$destination; versions=$versions; installedUtc=$installedUtc }
+        $pointerPath = Join-Path $rootPath 'components.json'
+        Assert-RadioComponentPath $pointerPath
+        $pointerTemporary = Join-Path $rootPath ('components-pointer-' + [guid]::NewGuid().ToString('N') + '.tmp')
+        Write-RadioComponentJson $pointerTemporary $pointer
+        if (Test-Path -LiteralPath $pointerPath -PathType Leaf) {
+            $previous = Join-Path $rootPath 'components.previous.json'
+            Assert-RadioComponentPath $previous
+            [IO.File]::Replace($pointerTemporary, $pointerPath, $previous)
+        } else { [IO.File]::Move($pointerTemporary, $pointerPath) }
+        Write-Host 'Verified components activated. Previous bundles were kept.'
+        return [pscustomobject]$pointer
+    } finally {
+        if ($pointerTemporary -and (Test-Path -LiteralPath $pointerTemporary)) { Remove-Item -LiteralPath $pointerTemporary -Force }
+        if ($staging -and (Test-Path -LiteralPath $staging)) { Remove-Item -LiteralPath $staging -Recurse -Force }
+        if ($lock) { $lock.Dispose() }
+    }
+}
+
+if ($FunctionsOnly) { return }
+try {
+    if ($env:OS -ne 'Windows_NT' -or $PSVersionTable.PSEdition -ne 'Desktop' -or -not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess) { throw 'Run this setup with 64-bit Windows PowerShell 5.1 on Windows 10 (2004+) or Windows 11 x64.' }
+    if ($CheckOnly -and $Repair) { throw 'Choose CheckOnly or Repair, not both.' }
+    if (-not $ManifestPath) { $ManifestPath = Join-Path $PSScriptRoot 'components.lock.json' }
+    $result = Install-RadioComponents -Root $DataRoot -LockPath $ManifestPath -OnlyCheck:$CheckOnly -ForceRepair:$Repair
+    Write-Host ('Components ready: ' + $result.bundle)
+    exit 0
+} catch {
+    Write-Error ('Component setup failed: ' + $_.Exception.Message) -ErrorAction Continue
+    exit 1
+}
+)
+    if (-not $match.Success) { return $false }
+    $reportedHash = $match.Groups['hash'].Value
+    return ($ExpectedHash.StartsWith($reportedHash, [StringComparison]::OrdinalIgnoreCase) -or $reportedHash.StartsWith($ExpectedHash, [StringComparison]::OrdinalIgnoreCase))
+}
+
+function Test-RadioComponentVersions([string]$Directory, $Versions) {
+    foreach ($name in @('mpv.exe','mpv.com','yt-dlp.exe','deno.exe')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Directory $name) -PathType Leaf)) { throw "Component bundle is missing $name." }
+    }
+    Write-Host 'Checking MPV, yt-dlp and Deno...'
+    $checks = @(
+        @{ File='mpv.com'; Arguments=@('--no-config','--load-scripts=no','--version'); Token=([string]$Versions.mpv -replace '^.*-git-', '') },
+        @{ File='yt-dlp.exe'; Arguments=@('--ignore-config','--version'); Token=[string]$Versions.ytDlp },
+        @{ File='deno.exe'; Arguments=@('--version'); Token=('deno ' + $Versions.deno) }
+    )
+    foreach ($check in $checks) {
+        if (-not $check.Token) { throw 'Missing component version in the bundle receipt.' }
+        $result = Invoke-RadioComponentProcess (Join-Path $Directory $check.File) $check.Arguments $Directory 20
+        $matchesVersion = if ($check.File -eq 'mpv.com') { Test-RadioMpvVersionOutput $result.Output $check.Token } else { $result.Output.IndexOf($check.Token, [StringComparison]::OrdinalIgnoreCase) -ge 0 }
+        if (-not $matchesVersion) {
+            $stdout = $result.Output.Trim()
+            $stderr = $result.Error.Trim()
+            if ($stdout.Length -gt 1024) { $stdout = $stdout.Substring(0, 1024) + '... [truncated]' }
+            if ($stderr.Length -gt 1024) { $stderr = $stderr.Substring(0, 1024) + '... [truncated]' }
+            throw "$($check.File) did not report its expected version ($($check.Token)). Standard output: $stdout; Standard error: $stderr"
+        }
+    }
+}
+
+function Get-RadioInstalledComponents([string]$Root, [string]$ExpectedManifestHash = '') {
+    $pointer = Read-RadioComponentJson (Join-Path $Root 'components.json')
+    if ($pointer.schema -ne 1 -or $pointer.bundle -cnotmatch '\A[0-9][A-Za-z0-9._-]{0,63}\z' -or -not [IO.Path]::IsPathRooted([string]$pointer.directory)) { throw 'Invalid installed component pointer.' }
+    $componentsRoot = [IO.Path]::GetFullPath((Join-Path $Root 'Components')).TrimEnd([char[]]'\/') + [IO.Path]::DirectorySeparatorChar
+    $directory = [IO.Path]::GetFullPath([string]$pointer.directory).TrimEnd([char[]]'\/')
+    if (-not $directory.StartsWith($componentsRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Installed component directory is outside this application.' }
+    Assert-RadioComponentPath $directory
+    $receipt = Read-RadioComponentJson (Join-Path $directory 'bundle.json')
+    if ($receipt.schema -ne 1 -or $receipt.bundle -cne $pointer.bundle -or $receipt.manifestSha256 -cnotmatch '\A[a-f0-9]{64}\z') { throw 'Invalid component bundle receipt.' }
+    if ($ExpectedManifestHash -and $receipt.manifestSha256 -cne $ExpectedManifestHash) { throw 'The installed component bundle does not match this app version.' }
+    foreach ($id in @('mpv','ytDlp','deno')) {
+        if (-not $pointer.versions.$id -or $pointer.versions.$id -cne $receipt.versions.$id) { throw 'Component versions do not match the bundle receipt.' }
+    }
+    $actual = @(Get-RadioComponentFiles $directory)
+    if ($actual.Count -ne @($receipt.files).Count -or -not $actual.Count) { throw 'Component files do not match the bundle receipt.' }
+    $expectedFiles = @{}
+    foreach ($file in $receipt.files) {
+        $null = Get-RadioComponentChildPath $directory ([string]$file.path)
+        if ($expectedFiles.ContainsKey([string]$file.path) -or $file.sha256 -cnotmatch '\A[a-f0-9]{64}\z') { throw 'Invalid component file receipt.' }
+        $expectedFiles[[string]$file.path] = $file
+    }
+    foreach ($file in $actual) {
+        $expected = $expectedFiles[$file.path]
+        if (-not $expected -or $file.length -ne $expected.length -or $file.sha256 -cne $expected.sha256) { throw "Component changed or is damaged: $($file.path). Use Repair components." }
+    }
+    Test-RadioComponentVersions $directory $pointer.versions
+    return $pointer
+}
+
+function Write-RadioComponentJson([string]$Path, $Value) {
+    [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+}
+
+function Install-RadioComponents([string]$Root, [string]$LockPath, [switch]$OnlyCheck, [switch]$ForceRepair) {
+    if (-not $Root -or -not [IO.Path]::IsPathRooted($Root)) { throw 'Supply an absolute per-user DataRoot folder.' }
+    $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd([char[]]'\/')
+    if ($rootPath -notmatch '^[A-Za-z]:\\.+' -or $rootPath -eq [IO.Path]::GetPathRoot($rootPath).TrimEnd('\')) { throw 'DataRoot must be a local application folder, not a drive root or network share.' }
+    Assert-RadioComponentPath $rootPath
+    $manifest = Read-RadioComponentManifest $LockPath
+    $manifestHash = (Get-FileHash -LiteralPath $LockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $lock = $null; $staging = $null; $pointerTemporary = $null
+    try {
+        if (-not $OnlyCheck) {
+            New-Item -ItemType Directory -Path $rootPath -Force | Out-Null
+            try { $lock = [IO.File]::Open((Join-Path $rootPath 'components.install.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
+            catch { throw 'Another component installation is already running, or this application folder is not writable.' }
+        }
+        try {
+            $current = Get-RadioInstalledComponents $rootPath $manifestHash
+            if ($OnlyCheck -or -not $ForceRepair) { return $current }
+            Write-Host 'Preparing a verified replacement; the current bundle will be retained.'
+        } catch {
+            if ($OnlyCheck) { throw }
+            Write-Host ('Components need installation or repair: ' + $_.Exception.Message)
+        }
+        $staging = Join-Path $rootPath ('component-staging-' + [guid]::NewGuid().ToString('N'))
+        $downloads = Join-Path $staging 'downloads'
+        $bundle = Join-Path $staging 'bundle'
+        New-Item -ItemType Directory -Path $downloads,$bundle -Force | Out-Null
+        # Verify every archive first. No downloaded executable runs until all
+        # three pinned artifacts have passed size and SHA-256 verification.
+        foreach ($component in $manifest.components) {
+            $download = Join-Path $downloads ($component.id + '.' + $component.format)
+            Get-RadioComponentDownload $component $download
+            Assert-RadioComponentDownload $component $download
+        }
+        Write-Host 'Extracting verified components...'
+        Expand-RadioMpvArchive (Join-Path $downloads 'mpv.zip') $bundle
         Expand-RadioDenoArchive (Join-Path $downloads 'deno.zip') $bundle
         [IO.File]::Copy((Join-Path $downloads 'ytDlp.exe'), (Join-Path $bundle 'yt-dlp.exe'), $false)
         $versions = [ordered]@{}
