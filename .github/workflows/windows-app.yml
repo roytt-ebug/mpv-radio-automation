@@ -40,6 +40,30 @@ jobs:
         id: build
         shell: powershell
         run: .\installer\Build-App.ps1
+      - name: Probe official MPV Windows 10 packaging
+        if: matrix.os == 'windows-2022'
+        shell: powershell
+        run: |
+          $url = 'https://github.com/mpv-player/mpv/releases/download/v0.42.0/mpv-v0.42.0-x86_64-pc-windows-msvc.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'official-mpv.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 180
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '8dd69cbab079086765fa5d873c09513b2834b85d146c1301718a757e8c0595ef') { throw 'Official MPV ZIP digest mismatch' }
+          $folder = Join-Path $env:RUNNER_TEMP 'official-mpv'
+          Expand-Archive -LiteralPath $zip -DestinationPath $folder
+          Get-ChildItem $folder -Recurse -File | Select-Object -ExpandProperty FullName | Select-Object -First 30 | Write-Host
+          $players = @(Get-ChildItem $folder -Recurse -Filter mpv.exe -File)
+          if (-not $players.Count) { throw 'Official release has no mpv.exe' }
+          foreach ($player in $players) {
+            $bin = Split-Path $player.FullName -Parent
+            Write-Host ('Official MPV Windows x64: ' + $player.FullName)
+            Write-Host ('Vulkan loader present: ' + (Test-Path (Join-Path $bin 'vulkan-1.dll')))
+            $mpvCom = Join-Path $bin 'mpv.com'
+            Write-Host ('mpv.com exists: ' + (Test-Path $mpvCom))
+            & $player.FullName --no-config --version
+            Write-Host ('mpv.exe version exit: ' + $LASTEXITCODE)
+            if (Test-Path $mpvCom) { & $mpvCom --no-config --version; Write-Host ('mpv.com version exit: ' + $LASTEXITCODE) }
+          }
       - name: Exercise and render the native interface without touching user settings
         shell: powershell
         run: |
